@@ -3,25 +3,16 @@ import { DIFF_MAP, CATEGORIES_LIST, type Category, type Profile, type Question }
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
 
-// Derive a stable internal email from the game name so Supabase auth works
-// without exposing email to the user at all.
-function nameToEmail(gameName: string): string {
-  const slug = gameName.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
-  return `${slug}@play.eauclaude`;
-}
-
-export async function signIn(gameName: string, password: string) {
-  const { data, error } = await sb.auth.signInWithPassword({
-    email: nameToEmail(gameName), password,
-  });
+export async function signIn(email: string, password: string) {
+  const { data, error } = await sb.auth.signInWithPassword({ email: email.trim(), password });
   if (error) throw error;
   return data.user!;
 }
 
-export async function signUp(gameName: string, password: string) {
+export async function signUp(email: string, password: string, displayName: string) {
   const { data, error } = await sb.auth.signUp({
-    email: nameToEmail(gameName), password,
-    options: { data: { display_name: gameName.trim() } },
+    email: email.trim(), password,
+    options: { data: { display_name: displayName.trim() } },
   });
   if (error) throw error;
   return data.user!;
