@@ -3,9 +3,7 @@ import { EC, ecSerif } from '../constants';
 import { ECSmallCaps, ECMonogram } from '../components/atoms';
 import { signIn, signUp } from '../api';
 
-interface Props {
-  onAuth: () => void;
-}
+interface Props { onAuth: () => void; }
 
 type Tab = 'signin' | 'signup';
 
@@ -16,38 +14,46 @@ const inputStyle: React.CSSProperties = {
 };
 
 export function AuthScreen({ onAuth }: Props) {
-  const [tab,         setTab]         = useState<Tab>('signin');
-  const [email,       setEmail]       = useState('');
-  const [password,    setPassword]    = useState('');
-  const [displayName, setDisplayName] = useState('');
-  const [loading,     setLoading]     = useState(false);
-  const [error,       setError]       = useState('');
+  const [tab,      setTab]      = useState<Tab>('signup');
+  const [name,     setName]     = useState('');
+  const [password, setPassword] = useState('');
+  const [loading,  setLoading]  = useState(false);
+  const [error,    setError]    = useState('');
 
   async function handleSubmit() {
-    if (!email.trim() || !password) { setError('Please fill all fields.'); return; }
-    if (tab === 'signup' && !displayName.trim()) { setError('Please enter a game name.'); return; }
+    if (!name.trim())  { setError('Enter your game name.'); return; }
+    if (!password)     { setError('Enter a password.'); return; }
+    if (tab === 'signup' && password.length < 6) {
+      setError('Password must be at least 6 characters.'); return;
+    }
     setLoading(true); setError('');
     try {
       if (tab === 'signin') {
-        await signIn(email.trim(), password);
+        await signIn(name.trim(), password);
       } else {
-        await signUp(email.trim(), password, displayName.trim());
+        await signUp(name.trim(), password);
       }
       onAuth();
     } catch (e: any) {
-      setError(e.message || 'Something went wrong.');
+      // Supabase error messages can be technical — make them friendlier
+      const msg: string = e.message || '';
+      if (msg.includes('already registered') || msg.includes('duplicate')) {
+        setError('That game name is already taken. Try another or sign in.');
+      } else if (msg.includes('Invalid login')) {
+        setError('Game name or password is incorrect.');
+      } else {
+        setError(msg || 'Something went wrong. Try again.');
+      }
     } finally {
       setLoading(false);
     }
   }
 
-  function switchTab(t: Tab) {
-    setTab(t);
-    setError('');
-  }
+  function switchTab(t: Tab) { setTab(t); setError(''); }
 
   return (
-    <div style={{ width: '100%', height: '100%', background: EC.cream, display: 'flex', flexDirection: 'column' }}>
+    <div style={{ width: '100%', height: '100%', background: EC.cream,
+      display: 'flex', flexDirection: 'column' }}>
       {/* Hero */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center',
         justifyContent: 'center', padding: '0 32px', textAlign: 'center' }}>
@@ -66,36 +72,26 @@ export function AuthScreen({ onAuth }: Props) {
       <div style={{ padding: '0 24px 36px' }}>
         {/* Tabs */}
         <div style={{ display: 'flex', borderBottom: `1px solid ${EC.creamLine}`, marginBottom: 16 }}>
-          {(['signin', 'signup'] as Tab[]).map(t => (
+          {(['signup', 'signin'] as Tab[]).map(t => (
             <div key={t} onClick={() => switchTab(t)}
               style={{ flex: 1, paddingBottom: 10, textAlign: 'center', cursor: 'pointer',
-                borderBottom: `2px solid ${tab === t ? EC.teal : 'transparent'}`, marginBottom: -1 }}>
+                borderBottom: `2px solid ${tab === t ? EC.teal : 'transparent'}`,
+                marginBottom: -1 }}>
               <ECSmallCaps color={tab === t ? EC.teal : EC.inkFaint} size={10}>
-                {t === 'signin' ? 'Sign in' : 'Create account'}
+                {t === 'signup' ? 'New player' : 'Sign in'}
               </ECSmallCaps>
             </div>
           ))}
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {tab === 'signup' && (
-            <input
-              type="text"
-              value={displayName}
-              onChange={e => setDisplayName(e.target.value)}
-              placeholder="Game name (e.g. Kolade)"
-              autoComplete="nickname"
-              maxLength={32}
-              style={inputStyle}
-              onKeyDown={e => { if (e.key === 'Enter') handleSubmit(); }}
-            />
-          )}
           <input
-            type="email"
-            value={email}
-            onChange={e => setEmail(e.target.value)}
-            placeholder="Email address"
-            autoComplete="email"
+            type="text"
+            value={name}
+            onChange={e => setName(e.target.value)}
+            placeholder={tab === 'signup' ? 'Choose a game name' : 'Your game name'}
+            autoComplete="username"
+            maxLength={32}
             style={inputStyle}
             onKeyDown={e => { if (e.key === 'Enter') handleSubmit(); }}
           />
@@ -103,7 +99,7 @@ export function AuthScreen({ onAuth }: Props) {
             type="password"
             value={password}
             onChange={e => setPassword(e.target.value)}
-            placeholder="Password"
+            placeholder={tab === 'signup' ? 'Create a password' : 'Password'}
             autoComplete={tab === 'signin' ? 'current-password' : 'new-password'}
             style={inputStyle}
             onKeyDown={e => { if (e.key === 'Enter') handleSubmit(); }}
@@ -112,9 +108,7 @@ export function AuthScreen({ onAuth }: Props) {
 
         {error && (
           <div style={{ marginTop: 10, fontFamily: ecSerif, fontStyle: 'italic',
-            fontSize: 13, color: EC.heart }}>
-            {error}
-          </div>
+            fontSize: 13, color: EC.heart }}>{error}</div>
         )}
 
         <button onClick={handleSubmit} disabled={loading} style={{
@@ -123,13 +117,13 @@ export function AuthScreen({ onAuth }: Props) {
           fontFamily: ecSerif, fontSize: 19, opacity: loading ? 0.65 : 1,
           cursor: loading ? 'default' : 'pointer',
         }}>
-          {loading ? '…' : tab === 'signin' ? 'Sign in' : 'Create account'}
+          {loading ? '…' : tab === 'signup' ? 'Begin →' : 'Sign in'}
         </button>
 
         {tab === 'signup' && (
           <div style={{ marginTop: 12, fontFamily: ecSerif, fontStyle: 'italic',
-            fontSize: 12, color: EC.inkFaint, textAlign: 'center', lineHeight: 1.5 }}>
-            By creating an account you agree to play nicely.
+            fontSize: 12, color: EC.inkFaint, textAlign: 'center' }}>
+            Your game name is your identity. Choose wisely.
           </div>
         )}
       </div>
