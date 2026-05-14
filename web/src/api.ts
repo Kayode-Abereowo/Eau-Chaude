@@ -186,9 +186,10 @@ export async function joinMatch(code: string, userId: string, displayName: strin
     .eq('status', 'waiting')
     .single();
   if (error || !match) throw new Error('Match not found or already started');
-  await sb.from('match_players').insert({
+  const { error: insertError } = await sb.from('match_players').insert({
     match_id: (match as any).id, user_id: userId, display_name: displayName,
   });
+  if (insertError) throw new Error('Could not join match. You may already be in it.');
   return match as any;
 }
 

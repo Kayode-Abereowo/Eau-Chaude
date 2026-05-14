@@ -119,35 +119,43 @@ export function LobbyScreen({ match, players, currentUserId, isHost, onStart, on
       <div style={{ padding: '0 24px 28px' }}>
         {!starting && (
           <>
-            {/* Join code */}
-            <div style={{ border: `1px solid ${EC.creamLine}`, borderRadius: 6,
-              padding: '12px 15px', marginBottom: 10 }}>
-              <ECSmallCaps color={EC.inkFaint} size={9}>Join code</ECSmallCaps>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 }}>
-                <div style={{ fontFamily: ecSerif, fontSize: 38, letterSpacing: '0.12em',
-                  color: EC.teal, lineHeight: 1, fontWeight: 400 }}>
-                  {match?.code}
-                </div>
-                <div onClick={copyLink} style={{ cursor: 'pointer', padding: '6px 12px',
-                  border: `1px solid ${EC.creamLine}`, borderRadius: 4,
-                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-                  <ECSmallCaps color={EC.teal} size={10}>{copied ? 'Copied ✓' : 'Copy link'}</ECSmallCaps>
-                  <ECMono color={EC.inkFaint} size={9}>{window.location.hostname}</ECMono>
-                </div>
-              </div>
-            </div>
-
+            {/* Host: show join code + start button */}
             {isHost && (
-              <button onClick={onStart} disabled={!bothReady} style={{ width: '100%', height: 52,
-                background: bothReady ? EC.teal : 'rgba(14,106,120,0.3)', color: EC.cream,
-                border: 'none', borderRadius: 6, fontFamily: ecSerif, fontSize: 18,
-                cursor: bothReady ? 'pointer' : 'default', transition: 'background 0.2s' }}>
-                {bothReady ? 'Start match →' : 'Waiting for opponent…'}
-              </button>
+              <>
+                <div style={{ border: `1px solid ${EC.creamLine}`, borderRadius: 6,
+                  padding: '12px 15px', marginBottom: 10 }}>
+                  <ECSmallCaps color={EC.inkFaint} size={9}>Join code</ECSmallCaps>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 }}>
+                    <div style={{ fontFamily: ecSerif, fontSize: 38, letterSpacing: '0.12em',
+                      color: EC.teal, lineHeight: 1, fontWeight: 400 }}>
+                      {match?.code}
+                    </div>
+                    <div onClick={copyLink} style={{ cursor: 'pointer', padding: '6px 12px',
+                      border: `1px solid ${EC.creamLine}`, borderRadius: 4,
+                      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                      <ECSmallCaps color={EC.teal} size={10}>{copied ? 'Copied ✓' : 'Copy link'}</ECSmallCaps>
+                      <ECMono color={EC.inkFaint} size={9}>{window.location.hostname}</ECMono>
+                    </div>
+                  </div>
+                </div>
+                <button onClick={onStart} disabled={!bothReady} style={{ width: '100%', height: 52,
+                  background: bothReady ? EC.teal : 'rgba(14,106,120,0.3)', color: EC.cream,
+                  border: 'none', borderRadius: 6, fontFamily: ecSerif, fontSize: 18,
+                  cursor: bothReady ? 'pointer' : 'default', transition: 'background 0.2s' }}>
+                  {bothReady ? 'Start match →' : 'Waiting for opponent…'}
+                </button>
+              </>
             )}
+
+            {/* Guest: confirmation + waiting message */}
             {!isHost && (
-              <div style={{ height: 52, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <ECSmallCaps color={EC.inkFaint} size={10}>Waiting for host to start…</ECSmallCaps>
+              <div style={{ border: `1px solid ${EC.creamLine}`, borderRadius: 6,
+                padding: '16px 15px', textAlign: 'center' }}>
+                <ECSmallCaps color={EC.teal} size={9}>You've joined</ECSmallCaps>
+                <div style={{ marginTop: 6, fontFamily: ecSerif, fontStyle: 'italic',
+                  fontSize: 14, color: EC.inkSoft }}>
+                  Waiting for the host to start the match…
+                </div>
               </div>
             )}
           </>
