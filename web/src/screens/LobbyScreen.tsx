@@ -69,7 +69,7 @@ export function LobbyScreen({ match, players, currentUserId, isHost, onStart, on
         </div>
         <div style={{ marginTop: 5, fontFamily: ecSerif, fontStyle: 'italic', fontSize: 13,
           color: starting ? EC.onTealSoft : EC.inkSoft }}>
-          {match ? `Ten questions · ${catName} · ${match.difficulty}` : 'A friendly contest of ten questions.'}
+          {match ? `${catName || 'All subjects'} · ${match.difficulty}` : 'A friendly contest of questions.'}
         </div>
       </div>
 
@@ -119,19 +119,22 @@ export function LobbyScreen({ match, players, currentUserId, isHost, onStart, on
       <div style={{ padding: '0 24px 28px' }}>
         {!starting && (
           <>
-            {/* Invite link — copies real URL to clipboard */}
-            <div onClick={copyLink} style={{ border: `1px solid ${EC.creamLine}`, borderRadius: 6,
-              padding: '11px 15px', display: 'flex', alignItems: 'center', gap: 10,
-              marginBottom: 10, cursor: 'pointer' }}>
-              <div style={{ flex: 1 }}>
-                <ECSmallCaps color={EC.inkFaint} size={9}>Invite link</ECSmallCaps>
-                <div style={{ marginTop: 3 }}>
-                  <ECMono color={EC.ink} size={12}>
-                    {window.location.hostname}/?join={match?.code}
-                  </ECMono>
+            {/* Join code */}
+            <div style={{ border: `1px solid ${EC.creamLine}`, borderRadius: 6,
+              padding: '12px 15px', marginBottom: 10 }}>
+              <ECSmallCaps color={EC.inkFaint} size={9}>Join code</ECSmallCaps>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 }}>
+                <div style={{ fontFamily: ecSerif, fontSize: 38, letterSpacing: '0.12em',
+                  color: EC.teal, lineHeight: 1, fontWeight: 400 }}>
+                  {match?.code}
+                </div>
+                <div onClick={copyLink} style={{ cursor: 'pointer', padding: '6px 12px',
+                  border: `1px solid ${EC.creamLine}`, borderRadius: 4,
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                  <ECSmallCaps color={EC.teal} size={10}>{copied ? 'Copied ✓' : 'Copy link'}</ECSmallCaps>
+                  <ECMono color={EC.inkFaint} size={9}>{window.location.hostname}</ECMono>
                 </div>
               </div>
-              <ECSmallCaps color={EC.teal} size={10}>{copied ? 'Copied ✓' : 'Copy'}</ECSmallCaps>
             </div>
 
             {isHost && (

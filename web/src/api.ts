@@ -59,7 +59,7 @@ const LOCAL_FALLBACK: Question[] = [
   { question: 'What is the capital city of Australia?',          answers: ['Sydney','Melbourne','Canberra','Brisbane'],       correct_index: 2, source: 'local' },
 ];
 
-async function fetchInternalQuestions(categoryId: number, difficulty: string, count = 6): Promise<Question[]> {
+async function fetchInternalQuestions(categoryId: number, difficulty: string, count: number): Promise<Question[]> {
   const { data, error } = await sb.rpc('get_session_questions', {
     p_category_id: categoryId,
     p_difficulty:  difficulty,
@@ -72,11 +72,24 @@ async function fetchInternalQuestions(categoryId: number, difficulty: string, co
   }));
 }
 
-async function fetchOpenTDBQuestions(opentdbId: number | null, difficulty: string, count = 4): Promise<Question[]> {
-  if (!opentdbId) return [];
+async function fetchRandomInternalQuestions(difficulty: string, count: number): Promise<Question[]> {
+  const { data, error } = await sb.rpc('get_random_questions', {
+    p_difficulty: difficulty,
+    p_limit:      count,
+  });
+  if (error || !data) return [];
+  return (data as any[]).map(q => ({
+    ...q,
+    answers: Array.isArray(q.answers) ? q.answers : JSON.parse(q.answers),
+  }));
+}
+
+async function fetchOpenTDBQuestions(opentdbId: number | null, difficulty: string, count: number, anyCategory = false): Promise<Question[]> {
+  if (!anyCategory && !opentdbId) return [];
   try {
     const diff = difficulty === 'easy' ? 'easy' : difficulty === 'hard' ? 'hard' : 'medium';
-    const url  = `https://opentdb.com/api.php?amount=${count}&category=${opentdbId}&difficulty=${diff}&type=multiple&encode=url3986`;
+    const catParam = opentdbId ? `&category=${opentdbId}` : '';
+    const url  = `https://opentdb.com/api.php?amount=${count}${catParam}&difficulty=${diff}&type=multiple&encode=url3986`;
     const res  = await fetch(url);
     const json = await res.json();
     if (json.response_code !== 0) return [];
@@ -94,15 +107,19 @@ async function fetchOpenTDBQuestions(opentdbId: number | null, difficulty: strin
   } catch { return []; }
 }
 
-export async function buildSession(category: Category, difficulty: string): Promise<Question[]> {
+export async function buildSession(category: Category | null, difficulty: string, count = 10): Promise<Question[]> {
   const diff = DIFF_MAP[difficulty] || 'medium';
+  const internalCount = Math.ceil(count * 0.6);
+  const externalCount = count - internalCount;
   const [internal, external] = await Promise.all([
-    fetchInternalQuestions(category.id, diff, 6),
-    fetchOpenTDBQuestions(category.opentdb_id, diff, 4),
+    category
+      ? fetchInternalQuestions(category.id, diff, internalCount)
+      : fetchRandomInternalQuestions(diff, internalCount),
+    fetchOpenTDBQuestions(category?.opentdb_id ?? null, diff, externalCount, category === null),
   ]);
   let questions = [...internal, ...external].sort(() => Math.random() - 0.5);
   if (questions.length < 5) questions = [...LOCAL_FALLBACK].sort(() => Math.random() - 0.5);
-  return questions.slice(0, 10);
+  return questions.slice(0, count);
 }
 
 // ── Session persistence ───────────────────────────────────────────────────────
@@ -143,14 +160,14 @@ function clientMatchCode(): string {
   return Array.from({ length: 4 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
 }
 
-export async function createMatch(userId: string, displayName: string, category: Category, difficulty: string) {
+export async function createMatch(userId: string, displayName: string, category: Category | null, difficulty: string, count = 10) {
   const diff      = DIFF_MAP[difficulty] || 'medium';
   const code      = clientMatchCode();
-  const questions = await buildSession(category, difficulty);
+  const questions = await buildSession(category, difficulty, count);
   const { data: match, error } = await sb.from('matches').insert({
     code,
     host_id:      userId,
-    category_id:  category.id,
+    category_id:  category?.id ?? null,
     difficulty:   diff,
     status:       'waiting',
     question_set: questions,

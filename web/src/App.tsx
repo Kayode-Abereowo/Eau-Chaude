@@ -155,10 +155,10 @@ export default function App() {
   }
 
   // ── Solo game ─────────────────────────────────────────────────
-  async function startSolo(cat: Category, diff: string) {
+  async function startSolo(cat: Category | null, diff: string, count = 10) {
     setCategory(cat); setDifficulty(diff);
     setScreen('loading');
-    const qs = await buildSession(cat, diff);
+    const qs = await buildSession(cat, diff, count);
     setQuestions(qs); setQIndex(0);
     setScore(0); setCorrect(0); setFastestSecs(TIMER_TOTAL);
     setBestStreak(0); setCurStreak(0); setSpeedBonus(0); setNewBadgesList([]);
@@ -188,7 +188,7 @@ export default function App() {
       if (!match && userId && category) {
         try {
           const { newBadges } = await saveSession(
-            userId, category.id, difficulty, newScore, newCorr, newBest, speedBonus + bonus, questions,
+            userId, category?.id ?? 0, difficulty, newScore, newCorr, newBest, speedBonus + bonus, questions,
           );
           if (newScore > prevBest) {
             setPrevBest(newScore);
@@ -210,13 +210,13 @@ export default function App() {
   }
 
   // ── H2H: create ───────────────────────────────────────────────
-  async function handleCreateMatch(cat: Category, diff: string) {
+  async function handleCreateMatch(cat: Category | null, diff: string, count = 10) {
     if (!userId || !profile) return;
     setCategory(cat); setDifficulty(diff);
     setScreen('loading');
     try {
-      const m = await createMatch(userId, profile.display_name, cat, diff);
-      setMatch({ ...m, status: 'waiting', category_id: cat.id, difficulty: DIFF_MAP_REVERSE[diff] || diff });
+      const m = await createMatch(userId, profile.display_name, cat, diff, count);
+      setMatch({ ...m, status: 'waiting', category_id: cat?.id ?? 0, difficulty: DIFF_MAP_REVERSE[diff] || diff });
       setIsHost(true);
       subscribeToMatch(m.id);
       const { data: qs } = await sb.from('matches').select('question_set').eq('id', m.id).single();
@@ -351,8 +351,8 @@ export default function App() {
               fastestSecs={fastestSecs === TIMER_TOTAL ? TIMER_TOTAL : fastestSecs}
               bestStreak={bestStreak} speedBonus={speedBonus}
               prevBest={prevBest}
-              categoryId={category?.id || 1}
-              onReplay={() => category && startSolo(category, difficulty)}
+              categoryId={category?.id ?? 0}
+              onReplay={() => startSolo(category, difficulty, questions.length)}
               onChallenge={() => setScreen('challengeMenu')}
               matchWinner={matchWinner}
               newBadges={newBadgesList}
