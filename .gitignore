@@ -1,0 +1,22 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+.expo/
+
+# Environment — never commit real keys
+.env
+.env.local
+.env.production
+
+# Supabase generated batch files
+scripts/batch_*.sql
+scripts/questions_import.sql
+
+# Claude Code internal
+.claude/
+
+# OS
+.DS_Store
+Thumbs.db

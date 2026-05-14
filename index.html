@@ -1,0 +1,1563 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <title>Eau Claude</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
+    body {
+      display: flex; align-items: center; justify-content: center;
+      min-height: 100vh; background: #E8E0D2;
+      font-family: "Cormorant Garamond", Georgia, serif;
+      -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
+    }
+    button { font-family: inherit; -webkit-tap-highlight-color: transparent; }
+    * { -webkit-tap-highlight-color: transparent; }
+  </style>
+  <!-- Supabase -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <!-- React 18 -->
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin></script>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useRef, useCallback } = React;
+
+// ─── Supabase client ──────────────────────────────────────────
+const SUPABASE_URL  = 'https://ootzwfmsjocialwbrgqn.supabase.co';
+const SUPABASE_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9vdHp3Zm1zam9jaWFsd2JyZ3FuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg2Mjc3MzEsImV4cCI6MjA5NDIwMzczMX0.gkVXf2QTMeep9DpfMp0i4G339sdihpzYqzCjzwAIirM';
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// ─── Design tokens ────────────────────────────────────────────
+const EC = {
+  cream:'#F4EEE6', creamSoft:'#EFE7DB', creamLine:'rgba(26,35,38,0.08)',
+  ink:'#1A2326', inkSoft:'rgba(26,35,38,0.55)', inkFaint:'rgba(26,35,38,0.35)',
+  teal:'#0E6A78', tealDeep:'#0A4C57', tealSoft:'rgba(14,106,120,0.08)',
+  tealLine:'rgba(244,238,230,0.18)', onTeal:'#F4EEE6',
+  onTealSoft:'rgba(244,238,230,0.62)', onTealFaint:'rgba(244,238,230,0.35)',
+  heart:'#B65B5C',
+};
+const ecSerif = '"Cormorant Garamond","EB Garamond",Georgia,serif';
+const ecMono  = '"DM Mono","JetBrains Mono",ui-monospace,monospace';
+const TIMER_TOTAL = 15;
+const LETTERS = ['A','B','C','D'];
+const DIFF_MAP = { 'Gentle':'easy', 'Medium':'medium', 'Hard':'hard' };
+
+// ─── Categories (mirrors DB seed) ────────────────────────────
+const CATEGORIES_LIST = [
+  { id:1,  n:'I',    name:'General Knowledge', count:4281, opentdb_id:9   },
+  { id:2,  n:'II',   name:'Geography',          count:1130, opentdb_id:22  },
+  { id:3,  n:'III',  name:'Film & Television',  count:649,  opentdb_id:11  },
+  { id:4,  n:'IV',   name:'Science & Nature',   count:623,  opentdb_id:17  },
+  { id:5,  n:'V',    name:'History',            count:619,  opentdb_id:23  },
+  { id:6,  n:'VI',   name:'Food & Drink',       count:459,  opentdb_id:null},
+  { id:7,  n:'VII',  name:'Literature',         count:423,  opentdb_id:10  },
+  { id:8,  n:'VIII', name:'Sport',              count:387,  opentdb_id:21  },
+  { id:9,  n:'IX',   name:'The Animal Kingdom', count:364,  opentdb_id:27  },
+  { id:10, n:'X',    name:'Music',              count:351,  opentdb_id:12  },
+  { id:11, n:'XI',   name:'Religion & Myth',    count:290,  opentdb_id:20  },
+  { id:12, n:'XII',  name:'Politics & Society', count:175,  opentdb_id:24  },
+  { id:13, n:'XIII', name:'Technology',         count:125,  opentdb_id:18  },
+  { id:14, n:'XIV',  name:'Art & Culture',      count:108,  opentdb_id:25  },
+];
+
+// Local fallback questions (General Knowledge) used when network unavailable
+const LOCAL_FALLBACK = [
+  { question:'How many sides does a hexagon have?',               answers:['Five','Six','Seven','Eight'],             correct_index:1, source:'local' },
+  { question:'What is the chemical symbol for gold?',             answers:['Go','Gd','Au','Ag'],                      correct_index:2, source:'local' },
+  { question:'In which year did the Berlin Wall fall?',           answers:['1987','1988','1989','1990'],               correct_index:2, source:'local' },
+  { question:'Who painted the Mona Lisa?',                        answers:['Michelangelo','Raphael','Leonardo da Vinci','Botticelli'], correct_index:2, source:'local' },
+  { question:'What is the largest planet in our solar system?',   answers:['Saturn','Jupiter','Neptune','Uranus'],    correct_index:1, source:'local' },
+  { question:'Which element has atomic number 1?',                answers:['Helium','Lithium','Hydrogen','Carbon'],   correct_index:2, source:'local' },
+  { question:'How many bones are in the adult human body?',       answers:['196','206','216','226'],                  correct_index:1, source:'local' },
+  { question:'What is the national currency of Japan?',           answers:['Won','Yuan','Yen','Ringgit'],             correct_index:2, source:'local' },
+  { question:'Which river flows through Vienna and Budapest?',    answers:['The Rhine','The Volga','The Danube','The Dnieper'], correct_index:2, source:'local' },
+  { question:'What is the capital city of Australia?',            answers:['Sydney','Melbourne','Canberra','Brisbane'], correct_index:2, source:'local' },
+];
+
+// ─── Atoms ────────────────────────────────────────────────────
+function ECSmallCaps({ children, color=EC.inkSoft, size=10, tracking=0.22, weight=500, style:s={} }) {
+  return <span style={{ fontFamily:ecSerif, fontWeight:weight, fontSize:size, letterSpacing:`${tracking}em`, textTransform:'uppercase', color, ...s }}>{children}</span>;
+}
+function ECMono({ children, color=EC.ink, size=12, style:s={} }) {
+  return <span style={{ fontFamily:ecMono, fontSize:size, color, fontWeight:400, letterSpacing:'0.04em', ...s }}>{children}</span>;
+}
+function ECHair({ color, vertical, length=12, style:s={} }) {
+  const c = color || EC.creamLine;
+  return vertical
+    ? <div style={{ width:1, height:length, background:c, flexShrink:0, ...s }} />
+    : <div style={{ height:1, width:length, background:c, ...s }} />;
+}
+function ECMonogram({ color=EC.teal, size=18 }) {
+  return <span style={{ fontFamily:ecSerif, fontWeight:500, fontSize:size, color, letterSpacing:'0.04em', fontStyle:'italic', lineHeight:1 }}>É&nbsp;c</span>;
+}
+function ECPageHeader({ left, right, dark, padTop=70 }) {
+  const c    = dark ? EC.onTealSoft : EC.inkSoft;
+  const line = dark ? EC.tealLine   : EC.creamLine;
+  return (
+    <div style={{ padding:`${padTop}px 28px 0` }}>
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+        <ECSmallCaps color={c}>{left}</ECSmallCaps>
+        <ECSmallCaps color={c}>{right}</ECSmallCaps>
+      </div>
+      <div style={{ height:1, background:line, marginTop:10 }} />
+    </div>
+  );
+}
+function Spinner({ dark }) {
+  const c = dark ? EC.onTealSoft : EC.inkFaint;
+  return (
+    <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:80 }}>
+      <svg width="28" height="28" viewBox="0 0 28 28" style={{ animation:'spin 1s linear infinite' }}>
+        <style>{`@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}`}</style>
+        <circle cx="14" cy="14" r="11" fill="none" stroke={c} strokeWidth="1.5" strokeDasharray="52" strokeDashoffset="20" strokeLinecap="round"/>
+      </svg>
+    </div>
+  );
+}
+
+// ─── iOS device shell ─────────────────────────────────────────
+function IOSStatusBar({ dark=false }) {
+  const c = dark ? '#fff' : '#000';
+  return (
+    <div style={{ position:'absolute', top:0, left:0, right:0, zIndex:30,
+      display:'flex', alignItems:'center', justifyContent:'space-between',
+      padding:'14px 24px 0', height:48 }}>
+      <span style={{ fontFamily:'-apple-system,system-ui', fontWeight:590, fontSize:15, letterSpacing:'-0.3px', color:c }}>9:41</span>
+      <div style={{ position:'absolute', top:10, left:'50%', transform:'translateX(-50%)',
+        width:120, height:34, borderRadius:20, background:'#000', zIndex:40 }} />
+      <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+        <svg width="17" height="11" viewBox="0 0 17 11" fill="none">
+          <rect x="0"    y="7"   width="3" height="4"   rx="0.6" fill={c} opacity="0.4"/>
+          <rect x="4.5"  y="4.5" width="3" height="6.5" rx="0.6" fill={c} opacity="0.6"/>
+          <rect x="9"    y="2"   width="3" height="9"   rx="0.6" fill={c} opacity="0.8"/>
+          <rect x="13.5" y="0"   width="3" height="11"  rx="0.6" fill={c}/>
+        </svg>
+        <svg width="25" height="12" viewBox="0 0 25 12" fill="none">
+          <rect x="0.5" y="0.5" width="21" height="11" rx="3.5" stroke={c} strokeOpacity="0.35"/>
+          <rect x="2" y="2" width="17" height="8" rx="2" fill={c}/>
+          <path d="M23 4v4c.8-.4 1.4-1.1 1.4-2s-.6-1.6-1.4-2Z" fill={c} fillOpacity="0.4"/>
+        </svg>
+      </div>
+    </div>
+  );
+}
+function IOSDevice({ children, dark=false }) {
+  return (
+    <div style={{ width:402, height:874, borderRadius:52, overflow:'hidden',
+      position:'relative', background:dark ? EC.tealDeep : EC.cream,
+      boxShadow:'0 40px 80px rgba(0,0,0,0.22), 0 0 0 1.5px rgba(0,0,0,0.14)', flexShrink:0 }}>
+      <IOSStatusBar dark={dark} />
+      <div style={{ height:'100%', position:'relative', zIndex:1 }}>{children}</div>
+      <div style={{ position:'absolute', bottom:8, left:'50%', transform:'translateX(-50%)',
+        width:139, height:5, borderRadius:100,
+        background:dark ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.18)',
+        zIndex:50, pointerEvents:'none' }} />
+    </div>
+  );
+}
+
+// ─── Supabase service layer ───────────────────────────────────
+
+// AUTH
+async function ensureAuth() {
+  const { data: { session } } = await sb.auth.getSession();
+  if (session?.user) return session.user;
+  const { data, error } = await sb.auth.signInAnonymously();
+  if (error) throw error;
+  return data.user;
+}
+
+async function loadProfile(userId) {
+  const { data } = await sb.from('profiles').select('*').eq('id', userId).single();
+  return data;
+}
+
+async function updateDisplayName(userId, name) {
+  await sb.from('profiles').update({ display_name: name }).eq('id', userId);
+}
+
+// QUESTION ROUTER
+function decodeHTML(str) {
+  const ta = document.createElement('textarea');
+  ta.innerHTML = str;
+  return ta.value;
+}
+
+async function fetchInternalQuestions(categoryId, difficulty, count=6) {
+  const { data, error } = await sb.rpc('get_session_questions', {
+    p_category_id: categoryId,
+    p_difficulty:  difficulty,
+    p_limit:       count,
+  });
+  if (error || !data) return [];
+  return data.map(q => ({ ...q, answers: Array.isArray(q.answers) ? q.answers : JSON.parse(q.answers) }));
+}
+
+async function fetchOpenTDBQuestions(opentdbId, difficulty, count=4) {
+  if (!opentdbId) return [];
+  try {
+    const url = `https://opentdb.com/api.php?amount=${count}&category=${opentdbId}&difficulty=${difficulty}&type=multiple&encode=url3986`;
+    const res  = await fetch(url);
+    const json = await res.json();
+    if (json.response_code !== 0) return [];
+    return json.results.map(q => {
+      const wrong   = q.incorrect_answers.map(a => decodeURIComponent(a));
+      const correct = decodeURIComponent(q.correct_answer);
+      const answers = [...wrong, correct].sort(() => Math.random() - 0.5);
+      return {
+        question:      decodeURIComponent(q.question),
+        answers,
+        correct_index: answers.indexOf(correct),
+        source:        'opentdb',
+      };
+    });
+  } catch { return []; }
+}
+
+async function buildSession(categoryId, opentdbId, difficulty) {
+  const diff = DIFF_MAP[difficulty] || 'medium';
+  const [internal, external] = await Promise.all([
+    fetchInternalQuestions(categoryId, diff, 6),
+    fetchOpenTDBQuestions(opentdbId, diff, 4),
+  ]);
+  let questions = [...internal, ...external].sort(() => Math.random() - 0.5);
+  if (questions.length < 5) questions = [...LOCAL_FALLBACK].sort(() => Math.random() - 0.5);
+  return questions.slice(0, 10);
+}
+
+// SESSION PERSISTENCE
+async function saveSession(userId, categoryId, difficulty, score, correctCount, bestStreak, speedBonus, questions) {
+  const diff = DIFF_MAP[difficulty] || 'medium';
+  const { data } = await sb.from('sessions').insert({
+    user_id:       userId,
+    category_id:   categoryId,
+    difficulty:    diff,
+    score,
+    correct_count: correctCount,
+    best_streak:   bestStreak,
+    speed_bonus:   speedBonus,
+    question_set:  questions,
+    completed_at:  new Date().toISOString(),
+  }).select('id').single();
+  await sb.rpc('upsert_personal_best', { p_user_id: userId, p_category_id: categoryId, p_score: score });
+  await sb.rpc('update_streak',        { p_user_id: userId });
+  await sb.rpc('update_weekly_score',  { p_user_id: userId, p_score: score });
+  const { data: newBadges } = await sb.rpc('check_and_award_badges', { p_user_id: userId });
+  return { sessionId: data?.id, newBadges: newBadges || [] };
+}
+
+// MATCH MANAGEMENT
+function clientMatchCode() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  return Array.from({ length:4 }, () => chars[Math.floor(Math.random()*chars.length)]).join('');
+}
+
+async function createMatch(userId, displayName, category, difficulty) {
+  const diff  = DIFF_MAP[difficulty] || 'medium';
+  const code  = clientMatchCode();
+  const questions = await buildSession(category.id, category.opentdb_id, difficulty);
+  const { data: match, error } = await sb.from('matches').insert({
+    code, host_id: userId,
+    category_id:  category.id,
+    difficulty:   diff,
+    status:       'waiting',
+    question_set: questions,
+  }).select('id,code').single();
+  if (error) throw error;
+  // Host joins as player
+  await sb.from('match_players').insert({
+    match_id: match.id, user_id: userId, display_name: displayName,
+  });
+  return match;
+}
+
+async function joinMatch(code, userId, displayName) {
+  const { data: match, error } = await sb.from('matches')
+    .select('id,code,status,category_id,difficulty,question_set')
+    .eq('code', code.toUpperCase())
+    .eq('status','waiting')
+    .single();
+  if (error || !match) throw new Error('Match not found or already started');
+  await sb.from('match_players').insert({
+    match_id: match.id, user_id: userId, display_name: displayName,
+  });
+  return match;
+}
+
+async function startMatch(matchId) {
+  await sb.from('matches').update({ status:'active', started_at: new Date().toISOString() }).eq('id', matchId);
+}
+
+async function updatePlayerScore(matchId, userId, score, qIndex, completed) {
+  await sb.from('match_players').update({
+    score, current_q_index: qIndex, completed,
+  }).eq('match_id', matchId).eq('user_id', userId);
+}
+
+// ─── Shared sub-components ────────────────────────────────────
+function TimerArc({ remaining, dark }) {
+  const r=22, circ=2*Math.PI*r, off=circ*(1-remaining/TIMER_TOTAL);
+  return (
+    <div style={{ position:'relative', width:54, height:54 }}>
+      <svg width="54" height="54" viewBox="0 0 54 54" style={{ transform:'rotate(-90deg)', display:'block' }}>
+        <circle cx="27" cy="27" r={r} fill="none" stroke={dark?'rgba(244,238,230,0.18)':EC.creamLine} strokeWidth="1.5"/>
+        <circle cx="27" cy="27" r={r} fill="none" stroke={dark?EC.cream:EC.teal} strokeWidth="1.5"
+          strokeDasharray={circ} strokeDashoffset={off} strokeLinecap="round"
+          style={{ transition:'stroke-dashoffset 0.9s linear' }}/>
+      </svg>
+      <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center' }}>
+        <span style={{ fontFamily:ecMono, fontSize:15, color:dark?EC.cream:EC.ink }}>{remaining}</span>
+      </div>
+    </div>
+  );
+}
+
+function AnswerTile({ letter, text, state='idle', dark, onClick }) {
+  let bg='transparent', bord=dark?'rgba(244,238,230,0.22)':EC.creamLine;
+  if (state==='selected') bord=dark?EC.cream:EC.ink;
+  else if (state==='correct') { bord=dark?EC.cream:EC.teal; bg=dark?'rgba(244,238,230,0.08)':EC.tealSoft; }
+  else if (state==='wrong')   { bord=EC.heart; bg='rgba(182,91,92,0.07)'; }
+  return (
+    <div onClick={onClick} style={{ border:`1px solid ${bord}`, borderRadius:5, padding:'14px 16px',
+      background:bg, display:'flex', alignItems:'center', gap:14,
+      cursor:onClick?'pointer':'default', transition:'background 0.18s, border-color 0.18s' }}>
+      <ECSmallCaps color={dark?EC.onTealSoft:EC.inkFaint} size={10} tracking={0.28}>{letter}</ECSmallCaps>
+      <div style={{ flex:1, fontFamily:ecSerif, fontSize:17, color:dark?EC.cream:EC.ink, lineHeight:1.25 }}>{text}</div>
+    </div>
+  );
+}
+
+// ─── Screen: Name setup ───────────────────────────────────────
+function NameSetupScreen({ onSave }) {
+  const [name, setName] = useState('');
+  return (
+    <div style={{ width:'100%', height:'100%', background:EC.cream, display:'flex', flexDirection:'column' }}>
+      <ECPageHeader left="Welcome" right="Your name" />
+      <div style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center',
+        justifyContent:'center', padding:'0 32px', textAlign:'center' }}>
+        <ECMonogram color={EC.teal} size={22} />
+        <div style={{ marginTop:32, fontFamily:ecSerif, fontWeight:400, fontSize:48,
+          lineHeight:0.95, color:EC.ink, letterSpacing:'-0.01em' }}>
+          Eau<br/><em style={{ fontStyle:'italic', color:EC.teal }}>Claude</em>
+        </div>
+        <div style={{ marginTop:24, fontFamily:ecSerif, fontStyle:'italic', fontSize:16,
+          color:EC.inkSoft, lineHeight:1.5, maxWidth:260 }}>
+          Before we begin —<br/>what shall we call you?
+        </div>
+        <input value={name} onChange={e => setName(e.target.value)}
+          placeholder="Your name"
+          style={{ marginTop:28, width:'100%', height:52, border:`1px solid ${EC.creamLine}`,
+            borderRadius:6, background:'transparent', fontFamily:ecSerif, fontSize:18,
+            color:EC.ink, padding:'0 16px', outline:'none', textAlign:'center' }}
+          onKeyDown={e => { if (e.key==='Enter' && name.trim()) onSave(name.trim()); }} />
+      </div>
+      <div style={{ padding:'0 24px 36px' }}>
+        <button onClick={() => name.trim() && onSave(name.trim())} style={{
+          width:'100%', height:56, background:name.trim()?EC.teal:'rgba(14,106,120,0.3)',
+          color:EC.cream, border:'none', borderRadius:6, fontFamily:ecSerif, fontSize:19,
+          cursor:name.trim()?'pointer':'default', transition:'background 0.2s' }}>
+          Begin
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Screen: Home ─────────────────────────────────────────────
+function HomeScreen({ profile, onSolo, onChallenge, onAdmin, onLeaderboard, onProfile, monogramTaps, onMonogramTap }) {
+  return (
+    <div style={{ width:'100%', height:'100%', background:EC.cream, display:'flex', flexDirection:'column' }}>
+      <ECPageHeader left="No. 001" right="Chapter — Welcome" />
+      <div style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center',
+        justifyContent:'center', padding:'0 32px', textAlign:'center' }}>
+        <div style={{ marginBottom:28, display:'flex', alignItems:'center', gap:10 }}>
+          <ECHair length={28} color={EC.inkFaint} />
+          <span onClick={onMonogramTap} style={{ cursor:'default' }}>
+            <ECMonogram color={EC.teal} size={20} />
+          </span>
+          <ECHair length={28} color={EC.inkFaint} />
+        </div>
+        <div style={{ fontFamily:ecSerif, fontWeight:400, fontSize:64,
+          lineHeight:0.95, color:EC.ink, letterSpacing:'-0.01em' }}>
+          Eau<br/><em style={{ fontStyle:'italic', color:EC.teal }}>Claude</em>
+        </div>
+        <div style={{ marginTop:24, fontFamily:ecSerif, fontStyle:'italic', fontSize:17,
+          color:EC.inkSoft, lineHeight:1.5, maxWidth:260 }}>
+          A trivia game,<br/>made with love.
+        </div>
+        {profile?.display_name && (
+          <div style={{ marginTop:14 }}>
+            <ECSmallCaps color={EC.inkFaint} size={9}>Welcome back, {profile.display_name}</ECSmallCaps>
+          </div>
+        )}
+      </div>
+      <div style={{ padding:'0 24px 28px' }}>
+        <button onClick={onSolo} style={{ width:'100%', height:60, background:EC.teal,
+          color:EC.cream, border:'none', borderRadius:6, fontFamily:ecSerif, fontSize:21,
+          letterSpacing:'0.02em', marginBottom:12, cursor:'pointer',
+          display:'flex', alignItems:'center', justifyContent:'space-between', padding:'0 22px' }}>
+          <span>Begin a solo game</span>
+          <ECSmallCaps color={EC.onTealSoft} size={10}>I</ECSmallCaps>
+        </button>
+        <button onClick={onChallenge} style={{ width:'100%', height:60, background:'transparent',
+          color:EC.ink, border:`1px solid ${EC.ink}`, borderRadius:6, fontFamily:ecSerif, fontSize:21,
+          letterSpacing:'0.02em', cursor:'pointer',
+          display:'flex', alignItems:'center', justifyContent:'space-between', padding:'0 22px' }}>
+          <span>Invite a friend</span>
+          <ECSmallCaps color={EC.inkSoft} size={10}>II</ECSmallCaps>
+        </button>
+        {/* Stats strip */}
+        <div style={{ marginTop:18, display:'flex', alignItems:'center',
+          justifyContent:'space-between', padding:'0 4px' }}>
+          <div>
+            <ECSmallCaps color={EC.inkFaint} size={9}>Personal best</ECSmallCaps>
+            <div style={{ marginTop:4 }}>
+              <ECMono color={EC.ink} size={14}>{profile?.personal_best > 0 ? profile.personal_best.toLocaleString() : '—'}</ECMono>
+            </div>
+          </div>
+          <ECHair vertical length={28} color={EC.creamLine} />
+          <div style={{ textAlign:'center' }}>
+            <ECSmallCaps color={EC.inkFaint} size={9}>Streak</ECSmallCaps>
+            <div style={{ marginTop:4 }}>
+              <ECMono color={EC.ink} size={14}>{profile?.current_streak ?? 0} days</ECMono>
+            </div>
+          </div>
+          <ECHair vertical length={28} color={EC.creamLine} />
+          <div style={{ textAlign:'right' }}>
+            <ECSmallCaps color={EC.inkFaint} size={9}>Longest</ECSmallCaps>
+            <div style={{ marginTop:4 }}><ECMono color={EC.ink} size={14}>{profile?.longest_streak ?? 0}d</ECMono></div>
+          </div>
+        </div>
+        {/* Secondary nav */}
+        <div style={{ marginTop:16, display:'flex', gap:8 }}>
+          <button onClick={onLeaderboard} style={{ flex:1, height:40, background:'transparent',
+            color:EC.inkSoft, border:`1px solid ${EC.creamLine}`, borderRadius:5,
+            fontFamily:ecSerif, fontSize:14, cursor:'pointer' }}>
+            Standings
+          </button>
+          <button onClick={onProfile} style={{ flex:1, height:40, background:'transparent',
+            color:EC.inkSoft, border:`1px solid ${EC.creamLine}`, borderRadius:5,
+            fontFamily:ecSerif, fontSize:14, cursor:'pointer' }}>
+            Profile
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Screen: Category ─────────────────────────────────────────
+function CategoryCard({ n, name, count, selected, onClick }) {
+  return (
+    <div onClick={onClick} style={{ flex:1, minWidth:0, height:94,
+      border:`1px solid ${selected?EC.teal:EC.creamLine}`,
+      background:selected?EC.tealSoft:'transparent', borderRadius:4, padding:'11px 12px',
+      display:'flex', flexDirection:'column', justifyContent:'space-between',
+      cursor:'pointer', transition:'background 0.15s, border-color 0.15s' }}>
+      <ECSmallCaps color={selected?EC.teal:EC.inkFaint} size={9} tracking={0.28}>{n}</ECSmallCaps>
+      <div>
+        <div style={{ fontFamily:ecSerif, fontWeight:400, fontSize:15.5, lineHeight:1.1, color:EC.ink }}>{name}</div>
+        <div style={{ marginTop:4 }}><ECMono color={EC.inkFaint} size={10}>{count.toLocaleString()}</ECMono></div>
+      </div>
+    </div>
+  );
+}
+
+function CategoryScreen({ onBegin, mode='solo' }) {
+  const [selectedIdx, setSelectedIdx] = useState(1);
+  const [difficulty, setDifficulty]   = useState('Medium');
+  const cat = CATEGORIES_LIST[selectedIdx];
+  return (
+    <div style={{ width:'100%', height:'100%', background:EC.cream, display:'flex', flexDirection:'column' }}>
+      <ECPageHeader left={`${mode==='h2h'?'Match':'Solo'} · No. 002`} right="Choose a subject" />
+      <div style={{ padding:'22px 28px 8px' }}>
+        <div style={{ fontFamily:ecSerif, fontSize:30, lineHeight:1.05, color:EC.ink, letterSpacing:'-0.01em' }}>
+          What would you<br/>like to know <em style={{ color:EC.teal, fontStyle:'italic' }}>tonight</em>?
+        </div>
+        <div style={{ marginTop:8, fontFamily:ecSerif, fontSize:13, color:EC.inkSoft, fontStyle:'italic' }}>Fourteen subjects. Ten questions each.</div>
+      </div>
+      <div style={{ padding:'0 28px 12px', display:'flex', alignItems:'center', gap:12 }}>
+        <ECSmallCaps color={EC.inkFaint} size={9}>Difficulty</ECSmallCaps>
+        <div style={{ display:'flex', border:`1px solid ${EC.creamLine}`, borderRadius:4, overflow:'hidden' }}>
+          {['Gentle','Medium','Hard'].map((d,i) => (
+            <div key={d} onClick={() => setDifficulty(d)} style={{ padding:'5px 12px',
+              fontFamily:ecSerif, fontSize:12,
+              background:difficulty===d?EC.ink:'transparent',
+              color:difficulty===d?EC.cream:EC.inkSoft,
+              borderLeft:i>0?`1px solid ${EC.creamLine}`:'none', cursor:'pointer' }}>{d}</div>
+          ))}
+        </div>
+      </div>
+      <div style={{ flex:1, padding:'0 24px', overflow:'hidden' }}>
+        <div style={{ display:'flex', flexDirection:'column', gap:7 }}>
+          {Array.from({length:7}).map((_,row) => (
+            <div key={row} style={{ display:'flex', gap:7 }}>
+              <CategoryCard {...CATEGORIES_LIST[row*2]} selected={selectedIdx===row*2} onClick={() => setSelectedIdx(row*2)} />
+              {CATEGORIES_LIST[row*2+1] && <CategoryCard {...CATEGORIES_LIST[row*2+1]} selected={selectedIdx===row*2+1} onClick={() => setSelectedIdx(row*2+1)} />}
+            </div>
+          ))}
+        </div>
+      </div>
+      <div style={{ padding:'8px 24px 28px' }}>
+        <button onClick={() => onBegin(cat, difficulty)} style={{ width:'100%', height:56,
+          background:EC.teal, color:EC.cream, border:'none', borderRadius:6,
+          fontFamily:ecSerif, fontSize:18, display:'flex', alignItems:'center',
+          justifyContent:'space-between', padding:'0 22px', cursor:'pointer' }}>
+          <span>Begin {cat.name} · 10 Qs</span>
+          <span style={{ fontSize:20 }}>→</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Screen: Loading ──────────────────────────────────────────
+function LoadingScreen({ category }) {
+  return (
+    <div style={{ width:'100%', height:'100%', background:EC.cream, display:'flex', flexDirection:'column',
+      alignItems:'center', justifyContent:'center', gap:20 }}>
+      <ECMonogram color={EC.teal} size={22} />
+      <div style={{ fontFamily:ecSerif, fontStyle:'italic', fontSize:17, color:EC.inkSoft }}>
+        Assembling your questions…
+      </div>
+      <Spinner />
+      {category && <ECSmallCaps color={EC.inkFaint} size={9}>{category.name}</ECSmallCaps>}
+    </div>
+  );
+}
+
+// ─── Screen: Question ─────────────────────────────────────────
+function QuestionScreen({ question, qIndex, totalQs, score, difficulty, onAnswer, onExit, opponentScore }) {
+  const [timeLeft,  setTimeLeft]  = useState(TIMER_TOTAL);
+  const [chosen,    setChosen]    = useState(null);
+  const [revealed,  setRevealed]  = useState(false);
+  const timerRef    = useRef(null);
+  const timeAtAnswerRef = useRef(TIMER_TOTAL);
+
+  const personal = !!question.personal;
+  const dark     = personal;
+
+  useEffect(() => {
+    setTimeLeft(TIMER_TOTAL); setChosen(null); setRevealed(false);
+    timeAtAnswerRef.current = TIMER_TOTAL;
+  }, [question]);
+
+  useEffect(() => {
+    if (revealed) return;
+    timerRef.current = setInterval(() => {
+      setTimeLeft(t => {
+        if (t <= 1) {
+          clearInterval(timerRef.current);
+          setRevealed(true);
+          setTimeout(() => onAnswer(false, 0, 0), 1100);
+          return 0;
+        }
+        return t - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timerRef.current);
+  }, [question, revealed]);
+
+  function handleSelect(idx) {
+    if (revealed) return;
+    clearInterval(timerRef.current);
+    timeAtAnswerRef.current = timeLeft;
+    setChosen(idx); setRevealed(true);
+    const correct = idx === question.correct_index;
+    const base    = difficulty==='Hard'?300 : difficulty==='Medium'?200 : 100;
+    const pts     = correct ? base + Math.round(base*(timeLeft/TIMER_TOTAL)*0.5) : 0;
+    setTimeout(() => onAnswer(correct, pts, timeLeft), 950);
+  }
+
+  function tileState(idx) {
+    if (!revealed) return chosen===idx?'selected':'idle';
+    if (idx===question.correct_index) return 'correct';
+    if (idx===chosen && idx!==question.correct_index) return 'wrong';
+    return 'idle';
+  }
+
+  return (
+    <div style={{ width:'100%', height:'100%', background:dark?EC.tealDeep:EC.cream, display:'flex', flexDirection:'column' }}>
+      <div style={{ padding:'54px 24px 0' }}>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+          <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+            <span onClick={onExit} style={{ fontFamily:ecSerif, fontSize:20, color:dark?EC.onTealSoft:EC.inkSoft, cursor:'pointer' }}>←</span>
+            <ECHair vertical length={14} color={dark?EC.tealLine:EC.creamLine} />
+            <ECSmallCaps color={dark?EC.onTealSoft:EC.inkSoft} size={10}>
+              {personal?'A personal question':difficulty}
+            </ECSmallCaps>
+          </div>
+          <TimerArc remaining={timeLeft} dark={dark} />
+        </div>
+        <div style={{ height:1, background:dark?EC.tealLine:EC.creamLine, marginTop:14 }} />
+      </div>
+      <div style={{ padding:'14px 28px 0', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+        <ECSmallCaps color={dark?EC.onTealFaint:EC.inkFaint} size={10}>
+          Question {String(qIndex+1).padStart(2,'0')} / {totalQs}
+        </ECSmallCaps>
+        <div style={{ display:'flex', alignItems:'center', gap:14 }}>
+          <div style={{ display:'flex', alignItems:'center', gap:7 }}>
+            <ECSmallCaps color={dark?EC.onTealFaint:EC.inkFaint} size={10}>Score</ECSmallCaps>
+            <ECMono color={dark?EC.cream:EC.ink} size={13}>{String(score).padStart(4,'0')}</ECMono>
+          </div>
+          {opponentScore !== undefined && (
+            <div style={{ display:'flex', alignItems:'center', gap:7 }}>
+              <ECHair vertical length={12} color={dark?EC.tealLine:EC.creamLine} />
+              <ECSmallCaps color={dark?EC.onTealFaint:EC.inkFaint} size={9}>Opp.</ECSmallCaps>
+              <ECMono color={dark?EC.onTealSoft:EC.inkSoft} size={12}>{String(opponentScore).padStart(4,'0')}</ECMono>
+            </div>
+          )}
+        </div>
+      </div>
+      {personal && (
+        <div style={{ padding:'16px 28px 0', display:'flex', alignItems:'center', gap:10 }}>
+          <span style={{ color:EC.cream, opacity:0.7, fontFamily:ecSerif, fontSize:14 }}>♥</span>
+          <ECSmallCaps color={EC.onTealSoft} size={9}>For Claude — from Eau</ECSmallCaps>
+        </div>
+      )}
+      <div style={{ padding:'20px 28px 18px' }}>
+        <div style={{ fontFamily:ecSerif, fontWeight:400, fontSize:personal?23:26, lineHeight:1.22,
+          color:dark?EC.cream:EC.ink, letterSpacing:'-0.005em' }}>
+          {question.question}
+        </div>
+      </div>
+      <div style={{ padding:'0 24px', display:'flex', flexDirection:'column', gap:9, flex:1 }}>
+        {question.answers.map((ans,i) => (
+          <AnswerTile key={i} letter={LETTERS[i]} text={ans} state={tileState(i)} dark={dark}
+            onClick={revealed?undefined:() => handleSelect(i)} />
+        ))}
+      </div>
+      <div style={{ padding:'12px 28px 24px', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+        <ECSmallCaps color={dark?EC.onTealFaint:EC.inkFaint} size={9}>
+          {personal?'Personal · Sparingly served':'Streak'}
+        </ECSmallCaps>
+        {!personal && (
+          <div style={{ display:'flex', gap:5 }}>
+            {Array.from({length:10}).map((_,i) => (
+              <div key={i} style={{ width:6, height:6, borderRadius:6, background:i<qIndex?EC.teal:EC.creamLine }} />
+            ))}
+          </div>
+        )}
+        {personal && <ECSmallCaps color={EC.onTealFaint} size={9}>+200 if correct</ECSmallCaps>}
+      </div>
+    </div>
+  );
+}
+
+// ─── Screen: Results ──────────────────────────────────────────
+function ResultsScreen({ score, correct, fastestSecs, bestStreak, speedBonus, prevBest, categoryName, onReplay, onChallenge, matchWinner, newBadges, allBadges }) {
+  const isNewBest = score > prevBest;
+  const rows = [
+    { label:'Correct',     mono:`${String(correct).padStart(2,'0')} / 10` },
+    { label:'Fastest',     mono:`${fastestSecs.toFixed(1)} s` },
+    { label:'Best streak', mono:`${bestStreak} in a row` },
+    { label:'Speed bonus', mono:`+${speedBonus}` },
+  ];
+  const earnedBadgeDetails = (newBadges||[]).map(id => allBadges.find(b=>b.id===id)).filter(Boolean);
+  return (
+    <div style={{ width:'100%', height:'100%', background:EC.cream, display:'flex', flexDirection:'column' }}>
+      <ECPageHeader left="No. 004" right="A session, concluded" />
+      <div style={{ padding:'22px 28px 0', textAlign:'center' }}>
+        {matchWinner && (
+          <div style={{ marginBottom:10 }}>
+            <ECSmallCaps color={matchWinner==='you'?EC.teal:EC.inkFaint} size={10}>
+              {matchWinner==='you'?'You won the match':'Opponent won'}
+            </ECSmallCaps>
+          </div>
+        )}
+        <ECSmallCaps color={EC.inkFaint} size={10}>Final score</ECSmallCaps>
+        <div style={{ marginTop:10, fontFamily:ecSerif, fontWeight:400, fontSize:76,
+          lineHeight:0.95, color:EC.ink, letterSpacing:'-0.02em' }}>
+          {score.toLocaleString()}
+        </div>
+        {isNewBest && (
+          <div style={{ marginTop:12, display:'inline-flex', alignItems:'center', gap:10,
+            padding:'5px 12px', border:`1px solid ${EC.teal}`, borderRadius:999 }}>
+            <span style={{ color:EC.teal, fontFamily:ecSerif, fontSize:13 }}>▲</span>
+            <ECSmallCaps color={EC.teal} size={10}>New personal best · +{(score-prevBest).toLocaleString()}</ECSmallCaps>
+          </div>
+        )}
+      </div>
+      <div style={{ margin:'16px 24px 0', border:`1px solid ${EC.creamLine}`, borderRadius:6 }}>
+        {rows.map((r,i) => (
+          <div key={r.label} style={{ display:'flex', justifyContent:'space-between', alignItems:'center',
+            padding:'11px 18px', borderTop:i===0?'none':`1px solid ${EC.creamLine}` }}>
+            <div style={{ fontFamily:ecSerif, fontStyle:'italic', fontSize:15, color:EC.ink }}>{r.label}</div>
+            <ECMono color={EC.ink} size={13}>{r.mono}</ECMono>
+          </div>
+        ))}
+      </div>
+      {earnedBadgeDetails.length > 0 && (
+        <div style={{ margin:'14px 24px 0', padding:'14px 16px',
+          background:EC.tealSoft, border:`1px solid rgba(14,106,120,0.15)`, borderRadius:6 }}>
+          <ECSmallCaps color={EC.teal} size={9}>Badge{earnedBadgeDetails.length>1?'s':''} earned</ECSmallCaps>
+          <div style={{ marginTop:10, display:'flex', flexDirection:'column', gap:8 }}>
+            {earnedBadgeDetails.map(b => (
+              <div key={b.id} style={{ display:'flex', alignItems:'center', gap:12 }}>
+                <span style={{ fontFamily:ecSerif, fontSize:16, color:EC.teal, minWidth:28 }}>{b.icon}</span>
+                <div>
+                  <div style={{ fontFamily:ecSerif, fontSize:14, color:EC.ink }}>{b.name}</div>
+                  <div style={{ fontFamily:ecSerif, fontStyle:'italic', fontSize:11, color:EC.inkSoft }}>{b.description}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      <div style={{ padding:'14px 28px 0' }}>
+        <ECSmallCaps color={EC.inkFaint} size={9}>By category · this session</ECSmallCaps>
+        <div style={{ marginTop:8, display:'flex', alignItems:'center', gap:12 }}>
+          <div style={{ flex:1, fontFamily:ecSerif, fontStyle:'italic', fontSize:13, color:EC.inkSoft }}>{categoryName}</div>
+          <div style={{ width:100, height:1, background:EC.creamLine, position:'relative' }}>
+            <div style={{ position:'absolute', left:0, top:-1, width:`${(correct/10)*100}%`, height:3, background:EC.teal, transition:'width 0.6s ease' }} />
+          </div>
+          <ECMono color={EC.ink} size={11} style={{ width:32, textAlign:'right' }}>{Math.round((correct/10)*100)}%</ECMono>
+        </div>
+      </div>
+      <div style={{ flex:1 }} />
+      <div style={{ padding:'0 24px 28px', display:'flex', flexDirection:'column', gap:10 }}>
+        <button onClick={onReplay} style={{ width:'100%', height:56, background:EC.teal,
+          color:EC.cream, border:'none', borderRadius:6, fontFamily:ecSerif, fontSize:19, cursor:'pointer',
+          display:'flex', alignItems:'center', justifyContent:'space-between', padding:'0 22px' }}>
+          <span>Play another round</span><span style={{ fontSize:19 }}>↻</span>
+        </button>
+        <button onClick={onChallenge} style={{ width:'100%', height:56, background:'transparent',
+          color:EC.ink, border:`1px solid ${EC.ink}`, borderRadius:6, fontFamily:ecSerif, fontSize:19,
+          cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'space-between', padding:'0 22px' }}>
+          <span>Challenge a friend</span><span style={{ fontSize:19 }}>→</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Screen: Join match ───────────────────────────────────────
+function JoinMatchScreen({ onJoin, onBack, loading }) {
+  const [code, setCode] = useState('');
+  const [err,  setErr]  = useState('');
+  function handleJoin() {
+    if (code.trim().length !== 4) { setErr('Enter the 4-character match code'); return; }
+    setErr('');
+    onJoin(code.trim());
+  }
+  return (
+    <div style={{ width:'100%', height:'100%', background:EC.cream, display:'flex', flexDirection:'column' }}>
+      <ECPageHeader left="No. 005" right="Join a match" />
+      <div style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center',
+        justifyContent:'center', padding:'0 32px' }}>
+        <ECSmallCaps color={EC.inkFaint} size={10}>Enter match code</ECSmallCaps>
+        <input value={code} onChange={e => setCode(e.target.value.toUpperCase().slice(0,4))}
+          placeholder="e.g. 8FA3"
+          style={{ marginTop:20, width:'100%', height:64, border:`1px solid ${EC.creamLine}`,
+            borderRadius:6, background:'transparent', fontFamily:ecMono, fontSize:28,
+            color:EC.ink, padding:'0 16px', outline:'none', textAlign:'center',
+            letterSpacing:'0.15em' }}
+          onKeyDown={e => { if (e.key==='Enter') handleJoin(); }} />
+        {err && <div style={{ marginTop:10, fontFamily:ecSerif, fontStyle:'italic', fontSize:13, color:EC.heart }}>{err}</div>}
+      </div>
+      <div style={{ padding:'0 24px 28px', display:'flex', flexDirection:'column', gap:10 }}>
+        <button onClick={handleJoin} disabled={loading} style={{ width:'100%', height:56,
+          background:EC.teal, color:EC.cream, border:'none', borderRadius:6,
+          fontFamily:ecSerif, fontSize:19, cursor:'pointer',
+          opacity:loading?0.6:1 }}>
+          {loading ? 'Joining…' : 'Join match →'}
+        </button>
+        <button onClick={onBack} style={{ width:'100%', height:48, background:'transparent',
+          color:EC.inkSoft, border:`1px solid ${EC.creamLine}`, borderRadius:6,
+          fontFamily:ecSerif, fontSize:17, cursor:'pointer' }}>
+          Back
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Screen: Lobby ────────────────────────────────────────────
+function PlayerCard({ name, initial, you, host, status, dark }) {
+  const text=dark?EC.cream:EC.ink, faint=dark?EC.onTealFaint:EC.inkFaint;
+  const soft=dark?EC.onTealSoft:EC.inkSoft, line=dark?EC.tealLine:EC.creamLine;
+  return (
+    <div style={{ flex:1, padding:'18px 14px', border:`1px solid ${line}`,
+      borderRadius:6, display:'flex', flexDirection:'column', alignItems:'center', gap:8, minWidth:0 }}>
+      <ECSmallCaps color={faint} size={9}>{you?'You':(host?'Host':'Guest')}</ECSmallCaps>
+      <div style={{ width:70, height:70, borderRadius:'50%', border:`1px solid ${line}`,
+        display:'flex', alignItems:'center', justifyContent:'center' }}>
+        <span style={{ fontFamily:ecSerif, fontStyle:'italic', fontSize:26, color:text, lineHeight:1 }}>{initial}</span>
+      </div>
+      <div style={{ fontFamily:ecSerif, fontSize:17, color:text, textAlign:'center' }}>{name}</div>
+      <div style={{ fontFamily:ecSerif, fontStyle:'italic', fontSize:11, color:soft, textAlign:'center', minHeight:14 }}>{status}</div>
+    </div>
+  );
+}
+
+function LobbyScreen({ match, players, currentUserId, isHost, onStart, onHome }) {
+  const [copied, setCopied] = useState(false);
+  const starting = match?.status === 'active';
+  const me       = players.find(p => p.user_id === currentUserId);
+  const opponent = players.find(p => p.user_id !== currentUserId);
+  const bothReady = players.length >= 2;
+
+  function copyLink() {
+    const link = `${window.location.href}?join=${match?.code}`;
+    navigator.clipboard?.writeText(link).catch(() => {});
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2200);
+  }
+
+  return (
+    <div style={{ width:'100%', height:'100%',
+      background:starting?EC.tealDeep:EC.cream,
+      display:'flex', flexDirection:'column', transition:'background 0.4s ease' }}>
+      <ECPageHeader left={starting?'Match · No. 005':'Lobby · No. 005'}
+        right={starting?'Beginning':'Awaiting'} dark={starting} />
+      <div style={{ padding:'22px 28px 0' }}>
+        <div style={{ fontFamily:ecSerif, fontSize:28, lineHeight:1.05,
+          letterSpacing:'-0.01em', color:starting?EC.cream:EC.ink }}>
+          {starting
+            ? <>The match <em style={{ fontStyle:'italic', opacity:0.85 }}>begins</em></>
+            : <>Head <em style={{ fontStyle:'italic', color:EC.teal }}>to</em> head</>}
+        </div>
+        <div style={{ marginTop:5, fontFamily:ecSerif, fontStyle:'italic', fontSize:13,
+          color:starting?EC.onTealSoft:EC.inkSoft }}>
+          {match ? `Ten questions · ${CATEGORIES_LIST.find(c=>c.id===match.category_id)?.name||''} · ${match.difficulty}` : 'A friendly contest of ten questions.'}
+        </div>
+      </div>
+      <div style={{ padding:'22px 22px 0', display:'flex', alignItems:'stretch', gap:10 }}>
+        <PlayerCard name={me?.display_name||'You'} initial={(me?.display_name||'Y')[0]}
+          you status={starting?'Ready':'Ready'} dark={starting} />
+        <div style={{ width:32, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+          <span style={{ fontFamily:ecSerif, fontStyle:'italic', fontSize:20,
+            color:starting?EC.cream:EC.ink, opacity:0.6 }}>vs</span>
+        </div>
+        <PlayerCard name={opponent?.display_name||'Claude'}
+          initial={(opponent?.display_name||'C')[0]}
+          status={opponent ? (starting?'Ready':'Ready') : 'Connecting…'} dark={starting} />
+      </div>
+      <div style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center',
+        justifyContent:'center', padding:'0 28px' }}>
+        {starting ? (
+          <>
+            <ECSmallCaps color={EC.onTealSoft} size={10}>Beginning in</ECSmallCaps>
+            <div style={{ marginTop:12, fontFamily:ecSerif, fontWeight:400, fontSize:112,
+              lineHeight:0.9, color:EC.cream }}>3</div>
+            <div style={{ marginTop:10, display:'flex', gap:10, alignItems:'center' }}>
+              <ECMono color={EC.onTealFaint} size={14}>3</ECMono>
+              <ECHair length={14} color={EC.tealLine} />
+              <ECMono color={EC.cream} size={14}>2</ECMono>
+              <ECHair length={14} color={EC.tealLine} />
+              <ECMono color={EC.onTealFaint} size={14}>1</ECMono>
+            </div>
+          </>
+        ) : (
+          <>
+            <div style={{ width:8, height:8, borderRadius:'50%', background:EC.teal, opacity:0.5, marginBottom:12 }} />
+            <ECSmallCaps color={EC.inkFaint} size={10}>
+              {bothReady ? 'Both players are ready' : 'Waiting for opponent'}
+            </ECSmallCaps>
+            <div style={{ marginTop:12, fontFamily:ecSerif, fontStyle:'italic', fontSize:14,
+              color:EC.inkSoft, textAlign:'center', maxWidth:240 }}>
+              {bothReady ? 'Host can start the match when ready.' : 'Your invitation has been sent.\nThey have until the kettle whistles.'}
+            </div>
+          </>
+        )}
+      </div>
+      <div style={{ padding:'0 24px 28px' }}>
+        {!starting && (
+          <>
+            <div onClick={copyLink} style={{ border:`1px solid ${EC.creamLine}`, borderRadius:6,
+              padding:'11px 15px', display:'flex', alignItems:'center', gap:10, marginBottom:10, cursor:'pointer' }}>
+              <div style={{ flex:1 }}>
+                <ECSmallCaps color={EC.inkFaint} size={9}>Invite link</ECSmallCaps>
+                <div style={{ marginTop:3 }}>
+                  <ECMono color={EC.ink} size={12}>eauclaude.app/m/{match?.code}</ECMono>
+                </div>
+              </div>
+              <ECSmallCaps color={EC.teal} size={10}>{copied?'Copied ✓':'Copy'}</ECSmallCaps>
+            </div>
+            {isHost && (
+              <button onClick={onStart} disabled={!bothReady} style={{ width:'100%', height:52,
+                background:bothReady?EC.teal:'rgba(14,106,120,0.3)', color:EC.cream, border:'none',
+                borderRadius:6, fontFamily:ecSerif, fontSize:18, cursor:bothReady?'pointer':'default',
+                transition:'background 0.2s' }}>
+                {bothReady ? 'Start match →' : 'Waiting for opponent…'}
+              </button>
+            )}
+            {!isHost && (
+              <div style={{ height:52, display:'flex', alignItems:'center', justifyContent:'center' }}>
+                <ECSmallCaps color={EC.inkFaint} size={10}>Waiting for host to start…</ECSmallCaps>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Screen: Admin ────────────────────────────────────────────
+function AdminScreen({ userId, onBack }) {
+  const [questions, setQuestions] = useState([]);
+  const [loading,   setLoading]   = useState(true);
+  const [form, setForm] = useState({ question:'', a0:'', a1:'', a2:'', a3:'', correct_index:0, user_id_b:'' });
+  const [saving, setSaving] = useState(false);
+  const [msg,    setMsg]    = useState('');
+
+  useEffect(() => {
+    sb.from('personal_questions').select('*').order('created_at', { ascending:false })
+      .then(({ data }) => { setQuestions(data||[]); setLoading(false); });
+  }, []);
+
+  async function addQuestion() {
+    if (!form.question || !form.a0 || !form.a1 || !form.a2 || !form.a3 || !form.user_id_b) {
+      setMsg('Fill all fields.'); return;
+    }
+    setSaving(true); setMsg('');
+    const answers = [form.a0, form.a1, form.a2, form.a3];
+    const { error } = await sb.from('personal_questions').insert({
+      question: form.question, answers, correct_index: Number(form.correct_index),
+      user_id_a: userId, user_id_b: form.user_id_b,
+    });
+    setSaving(false);
+    if (error) { setMsg('Error: ' + error.message); return; }
+    setMsg('Saved ✓');
+    const { data } = await sb.from('personal_questions').select('*').order('created_at', { ascending:false });
+    setQuestions(data||[]);
+    setForm({ question:'', a0:'', a1:'', a2:'', a3:'', correct_index:0, user_id_b:form.user_id_b });
+  }
+
+  async function toggleActive(q) {
+    await sb.from('personal_questions').update({
+      active: !q.active, retired_at: q.active ? new Date().toISOString() : null,
+    }).eq('id', q.id);
+    setQuestions(prev => prev.map(x => x.id===q.id ? { ...x, active:!x.active } : x));
+  }
+
+  const inputStyle = {
+    width:'100%', height:40, border:`1px solid ${EC.creamLine}`, borderRadius:4,
+    background:'transparent', fontFamily:ecSerif, fontSize:14, color:EC.ink,
+    padding:'0 10px', outline:'none', marginTop:6,
+  };
+
+  return (
+    <div style={{ width:'100%', height:'100%', background:EC.cream, display:'flex', flexDirection:'column' }}>
+      <ECPageHeader left="Admin" right="Personal Qs" />
+      <div style={{ flex:1, overflowY:'auto', padding:'16px 24px 0' }}>
+        {/* Add form */}
+        <ECSmallCaps color={EC.inkFaint} size={9}>Add a personal question</ECSmallCaps>
+        <div style={{ marginTop:10, display:'flex', flexDirection:'column', gap:0 }}>
+          <textarea value={form.question} onChange={e => setForm(f=>({...f,question:e.target.value}))}
+            placeholder="Question text"
+            style={{ ...inputStyle, height:60, resize:'none', paddingTop:10 }} />
+          {['a0','a1','a2','a3'].map((k,i) => (
+            <input key={k} value={form[k]} onChange={e => setForm(f=>({...f,[k]:e.target.value}))}
+              placeholder={`Answer ${LETTERS[i]}`} style={inputStyle} />
+          ))}
+          <div style={{ marginTop:8, display:'flex', alignItems:'center', gap:10 }}>
+            <ECSmallCaps color={EC.inkFaint} size={9}>Correct answer</ECSmallCaps>
+            <select value={form.correct_index} onChange={e => setForm(f=>({...f,correct_index:e.target.value}))}
+              style={{ fontFamily:ecSerif, fontSize:13, border:`1px solid ${EC.creamLine}`,
+                borderRadius:4, padding:'4px 8px', background:EC.cream, color:EC.ink }}>
+              {LETTERS.map((l,i) => <option key={i} value={i}>{l}</option>)}
+            </select>
+          </div>
+          <input value={form.user_id_b} onChange={e => setForm(f=>({...f,user_id_b:e.target.value}))}
+            placeholder="Partner's user ID (from Supabase)"
+            style={{ ...inputStyle, fontSize:12, fontFamily:ecMono }} />
+        </div>
+        {msg && <div style={{ marginTop:8, fontFamily:ecSerif, fontStyle:'italic', fontSize:13,
+          color:msg.startsWith('Error')?EC.heart:EC.teal }}>{msg}</div>}
+        <button onClick={addQuestion} disabled={saving} style={{ marginTop:10, width:'100%', height:44,
+          background:EC.teal, color:EC.cream, border:'none', borderRadius:5,
+          fontFamily:ecSerif, fontSize:16, cursor:'pointer', opacity:saving?0.6:1 }}>
+          {saving ? 'Saving…' : 'Add question'}
+        </button>
+
+        {/* Existing questions */}
+        <div style={{ marginTop:24 }}>
+          <ECSmallCaps color={EC.inkFaint} size={9}>Existing questions ({questions.length})</ECSmallCaps>
+          {loading && <Spinner />}
+          {questions.map(q => (
+            <div key={q.id} style={{ marginTop:10, padding:'12px 14px',
+              border:`1px solid ${q.active?EC.creamLine:'rgba(182,91,92,0.2)'}`,
+              borderRadius:5, opacity:q.active?1:0.5 }}>
+              <div style={{ fontFamily:ecSerif, fontSize:14, color:EC.ink, marginBottom:6 }}>{q.question}</div>
+              <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginBottom:8 }}>
+                {(Array.isArray(q.answers)?q.answers:JSON.parse(q.answers)).map((a,i) => (
+                  <div key={i} style={{ fontFamily:ecSerif, fontSize:12, color:i===q.correct_index?EC.teal:EC.inkFaint }}>
+                    {LETTERS[i]}. {a}{i===q.correct_index?' ✓':''}
+                  </div>
+                ))}
+              </div>
+              <button onClick={() => toggleActive(q)} style={{ fontFamily:ecSerif, fontSize:12,
+                color:q.active?EC.heart:EC.teal, background:'transparent', border:'none', cursor:'pointer', padding:0 }}>
+                {q.active ? 'Retire' : 'Reactivate'}
+              </button>
+            </div>
+          ))}
+        </div>
+        <div style={{ height:24 }} />
+      </div>
+      <div style={{ padding:'10px 24px 24px' }}>
+        <button onClick={onBack} style={{ width:'100%', height:48, background:'transparent',
+          color:EC.inkSoft, border:`1px solid ${EC.creamLine}`, borderRadius:6,
+          fontFamily:ecSerif, fontSize:17, cursor:'pointer' }}>
+          ← Back to home
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Screen: Leaderboard ─────────────────────────────────────
+function LeaderboardScreen({ userId, onBack }) {
+  const [tab,     setTab]     = useState('global');
+  const [rows,    setRows]    = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    setRows([]); setLoading(true);
+    (async () => {
+      if (tab === 'global') {
+        const { data } = await sb.from('global_leaderboard').select('user_id,display_name,score,rank').order('rank').limit(50);
+        setRows(data || []);
+      } else if (tab === 'weekly') {
+        const { data } = await sb.from('weekly_leaderboard').select('user_id,display_name,score,games_played,rank').order('rank').limit(50);
+        setRows(data || []);
+      } else {
+        const { data } = await sb.from('h2h_leaderboard').select('user_id,display_name,wins,losses,rank').order('rank').limit(50);
+        setRows(data || []);
+      }
+      setLoading(false);
+    })();
+  }, [tab]);
+
+  const tabs = [
+    { id:'global', label:'Global' },
+    { id:'weekly', label:'Weekly' },
+    { id:'h2h',    label:'H2H' },
+  ];
+
+  function rowLabel(r) {
+    if (tab === 'h2h') return `${r.wins}W · ${r.losses}L`;
+    return (r.score || 0).toLocaleString();
+  }
+
+  return (
+    <div style={{ width:'100%', height:'100%', background:EC.cream, display:'flex', flexDirection:'column' }}>
+      <ECPageHeader left="No. 006" right="The standings" />
+      <div style={{ padding:'18px 28px 0' }}>
+        <div style={{ fontFamily:ecSerif, fontSize:28, lineHeight:1.05, color:EC.ink, letterSpacing:'-0.01em' }}>
+          Who plays <em style={{ fontStyle:'italic', color:EC.teal }}>best</em>?
+        </div>
+      </div>
+      {/* Tab bar */}
+      <div style={{ padding:'16px 24px 0', display:'flex', gap:0,
+        border:`0`, borderBottom:`1px solid ${EC.creamLine}`, marginBottom:0 }}>
+        {tabs.map(t => (
+          <div key={t.id} onClick={() => setTab(t.id)} style={{
+            padding:'8px 18px', cursor:'pointer',
+            borderBottom:`2px solid ${tab===t.id?EC.teal:'transparent'}`,
+            marginBottom:-1,
+          }}>
+            <ECSmallCaps color={tab===t.id?EC.teal:EC.inkFaint} size={10}>{t.label}</ECSmallCaps>
+          </div>
+        ))}
+      </div>
+      <div style={{ flex:1, overflowY:'auto', padding:'0 24px' }}>
+        {loading && <Spinner />}
+        {!loading && rows.length === 0 && (
+          <div style={{ padding:'40px 0', textAlign:'center' }}>
+            <div style={{ fontFamily:ecSerif, fontStyle:'italic', fontSize:15, color:EC.inkSoft }}>
+              No scores recorded yet.
+            </div>
+          </div>
+        )}
+        {rows.map((r, i) => {
+          const isMe = r.user_id === userId;
+          return (
+            <div key={r.user_id || i} style={{
+              display:'flex', alignItems:'center',
+              padding:'13px 0',
+              borderBottom:`1px solid ${EC.creamLine}`,
+              background:isMe?EC.tealSoft:'transparent',
+              margin:'0 -24px', padding:'13px 24px',
+            }}>
+              <ECMono color={isMe?EC.teal:EC.inkFaint} size={12} style={{ width:28, flexShrink:0 }}>
+                {String(r.rank).padStart(2,'0')}
+              </ECMono>
+              <div style={{ flex:1, fontFamily:ecSerif, fontSize:16, color:EC.ink,
+                fontStyle:isMe?'italic':'normal' }}>
+                {r.display_name || '—'}{isMe && ' (you)'}
+              </div>
+              <ECMono color={isMe?EC.teal:EC.ink} size={13}>{rowLabel(r)}</ECMono>
+            </div>
+          );
+        })}
+        <div style={{ height:20 }} />
+      </div>
+      <div style={{ padding:'10px 24px 28px' }}>
+        <button onClick={onBack} style={{ width:'100%', height:48, background:'transparent',
+          color:EC.inkSoft, border:`1px solid ${EC.creamLine}`, borderRadius:6,
+          fontFamily:ecSerif, fontSize:17, cursor:'pointer' }}>← Back</button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Screen: Profile ──────────────────────────────────────────
+function ProfileScreen({ userId, profile, allBadges, onBack }) {
+  const [userBadges,  setUserBadges]  = useState([]);
+  const [catBests,    setCatBests]    = useState([]);
+  const [h2hRecord,   setH2hRecord]   = useState(null);
+  const [loading,     setLoading]     = useState(true);
+
+  useEffect(() => {
+    if (!userId) return;
+    (async () => {
+      const [{ data: ub }, { data: pb }, { data: h2h }] = await Promise.all([
+        sb.from('user_badges').select('badge_id,earned_at').eq('user_id', userId),
+        sb.from('personal_bests').select('category_id,score').eq('user_id', userId).order('score', { ascending:false }),
+        sb.from('h2h_records').select('wins,losses').eq('user_id', userId).single(),
+      ]);
+      setUserBadges(ub || []);
+      setCatBests(pb || []);
+      setH2hRecord(h2h || null);
+      setLoading(false);
+    })();
+  }, [userId]);
+
+  const earnedIds = new Set(userBadges.map(b => b.badge_id));
+  const totalGames = catBests.reduce((s, b) => s + 1, 0);
+
+  return (
+    <div style={{ width:'100%', height:'100%', background:EC.cream, display:'flex', flexDirection:'column' }}>
+      <ECPageHeader left="No. 007" right="Your record" />
+      <div style={{ flex:1, overflowY:'auto', padding:'0 24px' }}>
+        {/* Identity */}
+        <div style={{ padding:'20px 0 16px', textAlign:'center' }}>
+          <div style={{ width:64, height:64, borderRadius:'50%',
+            border:`1px solid ${EC.creamLine}`, display:'flex', alignItems:'center',
+            justifyContent:'center', margin:'0 auto 12px' }}>
+            <span style={{ fontFamily:ecSerif, fontStyle:'italic', fontSize:26, color:EC.teal }}>
+              {(profile?.display_name||'?')[0]}
+            </span>
+          </div>
+          <div style={{ fontFamily:ecSerif, fontSize:22, color:EC.ink }}>{profile?.display_name || '—'}</div>
+          <div style={{ marginTop:4 }}>
+            <ECSmallCaps color={EC.inkFaint} size={9}>Member · Eau Claude</ECSmallCaps>
+          </div>
+        </div>
+
+        {/* Stats row */}
+        <div style={{ display:'flex', border:`1px solid ${EC.creamLine}`, borderRadius:6, overflow:'hidden', marginBottom:20 }}>
+          {[
+            { label:'Best score',    val:(profile?.personal_best||0).toLocaleString() },
+            { label:'Streak',        val:`${profile?.current_streak||0}d` },
+            { label:'H2H wins',      val:String(h2hRecord?.wins||0) },
+          ].map((s, i) => (
+            <div key={s.label} style={{ flex:1, padding:'12px 8px', textAlign:'center',
+              borderLeft:i>0?`1px solid ${EC.creamLine}`:'none' }}>
+              <ECSmallCaps color={EC.inkFaint} size={8}>{s.label}</ECSmallCaps>
+              <div style={{ marginTop:5 }}><ECMono color={EC.ink} size={14}>{s.val}</ECMono></div>
+            </div>
+          ))}
+        </div>
+
+        {/* Badges */}
+        <ECSmallCaps color={EC.inkFaint} size={9}>Badges ({earnedIds.size} / {allBadges.length})</ECSmallCaps>
+        {loading ? <Spinner /> : (
+          <div style={{ marginTop:10, display:'flex', flexDirection:'column', gap:1,
+            border:`1px solid ${EC.creamLine}`, borderRadius:6, overflow:'hidden', marginBottom:20 }}>
+            {allBadges.map((b, i) => {
+              const earned = earnedIds.has(b.id);
+              return (
+                <div key={b.id} style={{ display:'flex', alignItems:'center', gap:12,
+                  padding:'11px 16px', opacity:earned?1:0.38,
+                  borderTop:i>0?`1px solid ${EC.creamLine}`:'none',
+                  background:earned?'transparent':'rgba(0,0,0,0.01)' }}>
+                  <span style={{ fontFamily:ecSerif, fontSize:16, color:earned?EC.teal:EC.inkFaint, minWidth:28 }}>{b.icon}</span>
+                  <div style={{ flex:1 }}>
+                    <div style={{ fontFamily:ecSerif, fontSize:14, color:EC.ink }}>{b.name}</div>
+                    <div style={{ fontFamily:ecSerif, fontStyle:'italic', fontSize:11, color:EC.inkSoft }}>{b.description}</div>
+                  </div>
+                  {earned && <ECSmallCaps color={EC.teal} size={8}>Earned</ECSmallCaps>}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Category personal bests */}
+        {catBests.length > 0 && (
+          <>
+            <ECSmallCaps color={EC.inkFaint} size={9}>Personal bests by category</ECSmallCaps>
+            <div style={{ marginTop:10, border:`1px solid ${EC.creamLine}`, borderRadius:6,
+              overflow:'hidden', marginBottom:20 }}>
+              {catBests.map((pb, i) => {
+                const cat = CATEGORIES_LIST.find(c => c.id === pb.category_id);
+                return (
+                  <div key={pb.category_id} style={{ display:'flex', justifyContent:'space-between',
+                    alignItems:'center', padding:'11px 16px',
+                    borderTop:i>0?`1px solid ${EC.creamLine}`:'none' }}>
+                    <div style={{ fontFamily:ecSerif, fontStyle:'italic', fontSize:14, color:EC.ink }}>
+                      {cat?.name || '—'}
+                    </div>
+                    <ECMono color={EC.ink} size={13}>{pb.score.toLocaleString()}</ECMono>
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        )}
+        <div style={{ height:16 }} />
+      </div>
+      <div style={{ padding:'10px 24px 28px' }}>
+        <button onClick={onBack} style={{ width:'100%', height:48, background:'transparent',
+          color:EC.inkSoft, border:`1px solid ${EC.creamLine}`, borderRadius:6,
+          fontFamily:ecSerif, fontSize:17, cursor:'pointer' }}>← Back</button>
+      </div>
+    </div>
+  );
+}
+
+// ─── App shell ────────────────────────────────────────────────
+function App() {
+  // Auth state
+  const [user,    setUser]    = useState(null);
+  const [profile, setProfile] = useState(null);
+  const [authReady, setAuthReady] = useState(false);
+
+  // Phase 3: badges catalogue + newly earned list
+  const [allBadges,     setAllBadges]     = useState([]);
+  const [newBadgesList, setNewBadgesList] = useState([]);
+
+  // Navigation
+  const [screen,    setScreen]    = useState('home');
+  const [prevBest,  setPrevBest]  = useState(0);
+
+  // Solo session
+  const [category,   setCategory]   = useState(null);
+  const [difficulty, setDifficulty] = useState('Medium');
+  const [questions,  setQuestions]  = useState([]);
+  const [qIndex,     setQIndex]     = useState(0);
+  const [score,      setScore]      = useState(0);
+  const [correct,    setCorrect]    = useState(0);
+  const [fastestSecs,setFastestSecs]= useState(TIMER_TOTAL);
+  const [bestStreak, setBestStreak] = useState(0);
+  const [curStreak,  setCurStreak]  = useState(0);
+  const [speedBonus, setSpeedBonus] = useState(0);
+
+  // H2H match state
+  const [match,       setMatch]       = useState(null);
+  const [matchPlayers,setMatchPlayers]= useState([]);
+  const [isHost,      setIsHost]      = useState(false);
+  const [opponentScore,setOpponentScore] = useState(undefined);
+  const [matchWinner, setMatchWinner] = useState(null);
+  const [joinLoading, setJoinLoading] = useState(false);
+  const [lobbyView,   setLobbyView]   = useState('create'); // 'create' | 'join'
+
+  // Admin tap counter (secret: tap monogram 7×)
+  const [monogramTaps, setMonogramTaps] = useState(0);
+  const monogramTimeout = useRef(null);
+
+  // ── Boot: auth + badges catalogue + check join code in URL ───
+  useEffect(() => {
+    (async () => {
+      try {
+        const [u] = await Promise.all([
+          ensureAuth(),
+          sb.from('badges').select('*').then(({ data }) => setAllBadges(data || [])),
+        ]);
+        setUser(u);
+        const p = await loadProfile(u.id);
+        setProfile(p);
+        setPrevBest(p?.personal_best || 0);
+        if (!p?.display_name || p.display_name === 'Player') {
+          setScreen('nameSetup');
+        }
+        const joinCode = new URLSearchParams(window.location.search).get('join');
+        if (joinCode) {
+          window.history.replaceState({}, '', window.location.pathname);
+          handleJoinMatch(joinCode, u, p);
+        }
+      } catch (e) {
+        console.error('Auth failed:', e);
+      } finally {
+        setAuthReady(true);
+      }
+    })();
+  }, []);
+
+  // ── Monogram tap (secret admin) ───────────────────────────────
+  function handleMonogramTap() {
+    const next = monogramTaps + 1;
+    setMonogramTaps(next);
+    clearTimeout(monogramTimeout.current);
+    if (next >= 7 && profile?.is_admin) { setScreen('admin'); setMonogramTaps(0); return; }
+    monogramTimeout.current = setTimeout(() => setMonogramTaps(0), 3000);
+  }
+
+  // ── Name setup ────────────────────────────────────────────────
+  async function handleNameSave(name) {
+    await updateDisplayName(user.id, name);
+    setProfile(p => ({ ...p, display_name: name }));
+    setScreen('home');
+  }
+
+  // ── Solo game ─────────────────────────────────────────────────
+  async function startSolo(cat, diff) {
+    setCategory(cat); setDifficulty(diff);
+    setScreen('loading');
+    const qs = await buildSession(cat.id, cat.opentdb_id, diff);
+    setQuestions(qs); setQIndex(0);
+    setScore(0); setCorrect(0);
+    setFastestSecs(TIMER_TOTAL); setBestStreak(0); setCurStreak(0); setSpeedBonus(0);
+    setScreen('question');
+  }
+
+  async function handleAnswer(isCorrect, pts, timeAtAnswer) {
+    const base     = difficulty==='Hard'?300:difficulty==='Medium'?200:100;
+    const bonus    = isCorrect ? pts - base : 0;
+    const newScore = score + pts;
+    const newCorr  = correct + (isCorrect?1:0);
+    const newStrk  = isCorrect ? curStreak+1 : 0;
+    const newBest  = Math.max(bestStreak, newStrk);
+    const newFast  = isCorrect && timeAtAnswer > 0
+      ? Math.min(fastestSecs, TIMER_TOTAL - timeAtAnswer + 0.1)
+      : fastestSecs;
+    setScore(newScore); setCorrect(newCorr);
+    setCurStreak(newStrk); setBestStreak(newBest);
+    setSpeedBonus(prev => prev + bonus);
+    setFastestSecs(newFast);
+
+    if (match) {
+      updatePlayerScore(match.id, user.id, newScore, qIndex+1, qIndex+1 >= questions.length);
+    }
+
+    if (qIndex+1 >= questions.length) {
+      if (!match) {
+        try {
+          const { newBadges } = await saveSession(
+            user.id, category.id, difficulty, newScore, newCorr, newBest, speedBonus+bonus, questions
+          );
+          if (newScore > prevBest) {
+            setPrevBest(newScore);
+            setProfile(p => ({ ...p, personal_best: newScore }));
+          }
+          if (newBadges.length > 0) setNewBadgesList(newBadges);
+          // Refresh streak from DB
+          loadProfile(user.id).then(p => p && setProfile(p));
+        } catch(e) { console.error('saveSession failed:', e); }
+      }
+      if (match) {
+        sb.rpc('complete_match', { p_match_id: match.id }).catch(() => {});
+        const opp = matchPlayers.find(p => p.user_id !== user.id);
+        setMatchWinner(opp && newScore > opp.score ? 'you' : 'opponent');
+      }
+      setTimeout(() => setScreen('results'), 420);
+    } else {
+      setQIndex(i => i+1);
+    }
+  }
+
+  // ── H2H: create match ─────────────────────────────────────────
+  async function handleCreateMatch(cat, diff) {
+    setCategory(cat); setDifficulty(diff);
+    setScreen('loading');
+    const name = profile?.display_name || 'Eau';
+    try {
+      const m = await createMatch(user.id, name, cat, diff);
+      setMatch(m); setIsHost(true);
+      subscribeToMatch(m.id);
+      const { data: qs } = await sb.from('matches').select('question_set').eq('id', m.id).single();
+      setQuestions(qs?.question_set || []);
+      const { data: players } = await sb.from('match_players').select('*').eq('match_id', m.id);
+      setMatchPlayers(players || []);
+      setScreen('lobby');
+    } catch (e) {
+      console.error(e);
+      setScreen('category');
+    }
+  }
+
+  // ── H2H: join match ───────────────────────────────────────────
+  async function handleJoinMatch(code, u=user, p=profile) {
+    if (!u) return;
+    setJoinLoading(true);
+    try {
+      const m = await joinMatch(code, u.id, p?.display_name || 'Claude');
+      setMatch(m); setIsHost(false);
+      subscribeToMatch(m.id);
+      setQuestions(Array.isArray(m.question_set) ? m.question_set : JSON.parse(m.question_set));
+      const { data: players } = await sb.from('match_players').select('*').eq('match_id', m.id);
+      setMatchPlayers(players || []);
+      setScreen('lobby');
+    } catch (e) {
+      alert(e.message);
+    } finally {
+      setJoinLoading(false);
+    }
+  }
+
+  // ── H2H: realtime subscription ───────────────────────────────
+  const channelRef = useRef(null);
+  function subscribeToMatch(matchId) {
+    if (channelRef.current) channelRef.current.unsubscribe();
+    channelRef.current = sb.channel(`match-${matchId}`)
+      .on('postgres_changes', { event:'UPDATE', schema:'public', table:'match_players', filter:`match_id=eq.${matchId}` },
+        payload => {
+          const updated = payload.new;
+          setMatchPlayers(prev => {
+            const next = prev.map(p => p.id === updated.id ? { ...p, ...updated } : p);
+            if (!next.find(p => p.id === updated.id)) return [...prev, updated];
+            return next;
+          });
+          if (updated.user_id !== user?.id) setOpponentScore(updated.score);
+        })
+      .on('postgres_changes', { event:'UPDATE', schema:'public', table:'matches', filter:`id=eq.${matchId}` },
+        payload => {
+          const m = payload.new;
+          setMatch(prev => ({ ...prev, ...m }));
+          if (m.status === 'active' && screen === 'lobby') {
+            setQIndex(0); setScore(0); setCorrect(0);
+            setFastestSecs(TIMER_TOTAL); setBestStreak(0); setCurStreak(0); setSpeedBonus(0);
+            setTimeout(() => setScreen('question'), 3200);
+          }
+        })
+      .on('postgres_changes', { event:'INSERT', schema:'public', table:'match_players', filter:`match_id=eq.${matchId}` },
+        payload => {
+          setMatchPlayers(prev => [...prev, payload.new]);
+        })
+      .subscribe();
+  }
+
+  async function handleStartMatch() {
+    if (!match) return;
+    await startMatch(match.id);
+    // Transition handled by subscription
+    setQIndex(0); setScore(0); setCorrect(0);
+    setFastestSecs(TIMER_TOTAL); setBestStreak(0); setCurStreak(0); setSpeedBonus(0);
+    setTimeout(() => setScreen('question'), 3200);
+  }
+
+  // ── Screen routing ────────────────────────────────────────────
+  if (!authReady) {
+    return (
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:'100vh' }}>
+        <IOSDevice><LoadingScreen /></IOSDevice>
+      </div>
+    );
+  }
+
+  const isDark = (screen==='lobby' && match?.status==='active') || false;
+
+  return (
+    <div style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:'100vh', padding:'20px 0' }}>
+      <div style={{ filter:'drop-shadow(0 32px 56px rgba(10,30,36,0.22))' }}>
+        <IOSDevice dark={isDark}>
+          {screen==='nameSetup' && <NameSetupScreen onSave={handleNameSave} />}
+
+          {screen==='home' && (
+            <HomeScreen profile={profile} onSolo={() => setScreen('category')}
+              onChallenge={() => { setLobbyView('create'); setScreen('challengeMenu'); }}
+              onLeaderboard={() => setScreen('leaderboard')}
+              onProfile={() => setScreen('profile')}
+              monogramTaps={monogramTaps} onMonogramTap={handleMonogramTap} />
+          )}
+
+          {screen==='challengeMenu' && (
+            <div style={{ width:'100%', height:'100%', background:EC.cream, display:'flex', flexDirection:'column' }}>
+              <ECPageHeader left="No. 005" right="Head to head" />
+              <div style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center',
+                justifyContent:'center', padding:'0 32px', gap:12 }}>
+                <div style={{ fontFamily:ecSerif, fontSize:28, lineHeight:1.05, color:EC.ink,
+                  textAlign:'center', letterSpacing:'-0.01em' }}>
+                  Head <em style={{ fontStyle:'italic', color:EC.teal }}>to</em> head
+                </div>
+                <div style={{ fontFamily:ecSerif, fontStyle:'italic', fontSize:15, color:EC.inkSoft, textAlign:'center' }}>
+                  Challenge a friend to ten questions<br/>on the same question set.
+                </div>
+              </div>
+              <div style={{ padding:'0 24px 28px', display:'flex', flexDirection:'column', gap:10 }}>
+                <button onClick={() => setScreen('category-h2h')} style={{ width:'100%', height:56,
+                  background:EC.teal, color:EC.cream, border:'none', borderRadius:6,
+                  fontFamily:ecSerif, fontSize:19, cursor:'pointer',
+                  display:'flex', alignItems:'center', justifyContent:'space-between', padding:'0 22px' }}>
+                  <span>Create a match</span><span>→</span>
+                </button>
+                <button onClick={() => setScreen('join')} style={{ width:'100%', height:56,
+                  background:'transparent', color:EC.ink, border:`1px solid ${EC.ink}`,
+                  borderRadius:6, fontFamily:ecSerif, fontSize:19, cursor:'pointer',
+                  display:'flex', alignItems:'center', justifyContent:'space-between', padding:'0 22px' }}>
+                  <span>Join with a code</span><span>→</span>
+                </button>
+                <button onClick={() => setScreen('home')} style={{ width:'100%', height:44,
+                  background:'transparent', color:EC.inkSoft, border:`1px solid ${EC.creamLine}`,
+                  borderRadius:6, fontFamily:ecSerif, fontSize:16, cursor:'pointer' }}>Back</button>
+              </div>
+            </div>
+          )}
+
+          {screen==='category' && <CategoryScreen onBegin={startSolo} mode="solo" />}
+          {screen==='category-h2h' && <CategoryScreen onBegin={handleCreateMatch} mode="h2h" />}
+
+          {screen==='join' && (
+            <JoinMatchScreen onJoin={code => handleJoinMatch(code)}
+              onBack={() => setScreen('challengeMenu')} loading={joinLoading} />
+          )}
+
+          {screen==='loading' && <LoadingScreen category={category} />}
+
+          {screen==='question' && questions.length > 0 && (
+            <QuestionScreen question={questions[qIndex]} qIndex={qIndex}
+              totalQs={questions.length} score={score} difficulty={difficulty}
+              onAnswer={handleAnswer} onExit={() => { setMatch(null); setScreen('home'); }}
+              opponentScore={match ? opponentScore : undefined} />
+          )}
+
+          {screen==='results' && (
+            <ResultsScreen score={score} correct={correct}
+              fastestSecs={fastestSecs>=TIMER_TOTAL?TIMER_TOTAL:fastestSecs}
+              bestStreak={bestStreak} speedBonus={speedBonus}
+              prevBest={prevBest} categoryName={category?.name||'General Knowledge'}
+              matchWinner={matchWinner}
+              newBadges={newBadgesList} allBadges={allBadges}
+              onReplay={() => { setMatch(null); setMatchWinner(null); setNewBadgesList([]); startSolo(category, difficulty); }}
+              onChallenge={() => { setMatch(null); setMatchWinner(null); setNewBadgesList([]); setScreen('challengeMenu'); }} />
+          )}
+
+          {screen==='lobby' && match && (
+            <LobbyScreen match={match} players={matchPlayers}
+              currentUserId={user?.id} isHost={isHost}
+              onStart={handleStartMatch} onHome={() => { setMatch(null); setScreen('home'); }} />
+          )}
+
+          {screen==='leaderboard' && (
+            <LeaderboardScreen userId={user?.id} onBack={() => setScreen('home')} />
+          )}
+
+          {screen==='profile' && (
+            <ProfileScreen userId={user?.id} profile={profile} allBadges={allBadges}
+              onBack={() => setScreen('home')} />
+          )}
+
+          {screen==='admin' && <AdminScreen userId={user?.id} onBack={() => setScreen('home')} />}
+        </IOSDevice>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
