@@ -9,8 +9,11 @@ export async function signIn(email: string, password: string) {
   return data.user!;
 }
 
-export async function signUp(email: string, password: string) {
-  const { data, error } = await sb.auth.signUp({ email, password });
+export async function signUp(email: string, password: string, displayName: string) {
+  const { data, error } = await sb.auth.signUp({
+    email, password,
+    options: { data: { display_name: displayName.trim() } },
+  });
   if (error) throw error;
   return data.user!;
 }

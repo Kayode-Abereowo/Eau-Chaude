@@ -16,20 +16,22 @@ const inputStyle: React.CSSProperties = {
 };
 
 export function AuthScreen({ onAuth }: Props) {
-  const [tab,      setTab]      = useState<Tab>('signin');
-  const [email,    setEmail]    = useState('');
-  const [password, setPassword] = useState('');
-  const [loading,  setLoading]  = useState(false);
-  const [error,    setError]    = useState('');
+  const [tab,         setTab]         = useState<Tab>('signin');
+  const [email,       setEmail]       = useState('');
+  const [password,    setPassword]    = useState('');
+  const [displayName, setDisplayName] = useState('');
+  const [loading,     setLoading]     = useState(false);
+  const [error,       setError]       = useState('');
 
   async function handleSubmit() {
     if (!email.trim() || !password) { setError('Please fill all fields.'); return; }
+    if (tab === 'signup' && !displayName.trim()) { setError('Please enter a game name.'); return; }
     setLoading(true); setError('');
     try {
       if (tab === 'signin') {
         await signIn(email.trim(), password);
       } else {
-        await signUp(email.trim(), password);
+        await signUp(email.trim(), password, displayName.trim());
       }
       onAuth();
     } catch (e: any) {
@@ -39,9 +41,14 @@ export function AuthScreen({ onAuth }: Props) {
     }
   }
 
+  function switchTab(t: Tab) {
+    setTab(t);
+    setError('');
+  }
+
   return (
     <div style={{ width: '100%', height: '100%', background: EC.cream, display: 'flex', flexDirection: 'column' }}>
-      {/* Header area */}
+      {/* Hero */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center',
         justifyContent: 'center', padding: '0 32px', textAlign: 'center' }}>
         <ECMonogram color={EC.teal} size={22} />
@@ -58,12 +65,11 @@ export function AuthScreen({ onAuth }: Props) {
       {/* Form */}
       <div style={{ padding: '0 24px 36px' }}>
         {/* Tabs */}
-        <div style={{ display: 'flex', borderBottom: `1px solid ${EC.creamLine}`, marginBottom: 20 }}>
+        <div style={{ display: 'flex', borderBottom: `1px solid ${EC.creamLine}`, marginBottom: 16 }}>
           {(['signin', 'signup'] as Tab[]).map(t => (
-            <div key={t} onClick={() => { setTab(t); setError(''); }}
+            <div key={t} onClick={() => switchTab(t)}
               style={{ flex: 1, paddingBottom: 10, textAlign: 'center', cursor: 'pointer',
-                borderBottom: `2px solid ${tab === t ? EC.teal : 'transparent'}`,
-                marginBottom: -1 }}>
+                borderBottom: `2px solid ${tab === t ? EC.teal : 'transparent'}`, marginBottom: -1 }}>
               <ECSmallCaps color={tab === t ? EC.teal : EC.inkFaint} size={10}>
                 {t === 'signin' ? 'Sign in' : 'Create account'}
               </ECSmallCaps>
@@ -72,6 +78,18 @@ export function AuthScreen({ onAuth }: Props) {
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {tab === 'signup' && (
+            <input
+              type="text"
+              value={displayName}
+              onChange={e => setDisplayName(e.target.value)}
+              placeholder="Game name (e.g. Kolade)"
+              autoComplete="nickname"
+              maxLength={32}
+              style={inputStyle}
+              onKeyDown={e => { if (e.key === 'Enter') handleSubmit(); }}
+            />
+          )}
           <input
             type="email"
             value={email}
