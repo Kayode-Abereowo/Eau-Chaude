@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { sb } from './supabase';
 import {
-  TIMER_TOTAL, type Category, type Profile, type Badge, type Question,
+  TIMER_TOTAL, type Profile, type Badge, type Question,
 } from './constants';
 import {
   getSession, loadProfile, updateDisplayName, buildSession,
@@ -44,7 +44,7 @@ export default function App() {
   const [screen, setScreen] = useState<Screen>('boot');
 
   // ── Solo session ─────────────────────────────────────────────
-  const [category,    setCategory]    = useState<Category | null>(null);
+  const [category,    setCategory]    = useState<null>(null);
   const [difficulty,  setDifficulty]  = useState('Medium');
   const [questions,   setQuestions]   = useState<Question[]>([]);
   const [qIndex,      setQIndex]      = useState(0);
@@ -155,10 +155,10 @@ export default function App() {
   }
 
   // ── Solo game ─────────────────────────────────────────────────
-  async function startSolo(cat: Category | null, diff: string, count = 10) {
-    setCategory(cat); setDifficulty(diff);
+  async function startSolo(diff: string, count = 10) {
+    setCategory(null); setDifficulty(diff);
     setScreen('loading');
-    const qs = await buildSession(cat, diff, count);
+    const qs = await buildSession(null, diff, count);
     setQuestions(qs); setQIndex(0);
     setScore(0); setCorrect(0); setFastestSecs(TIMER_TOTAL);
     setBestStreak(0); setCurStreak(0); setSpeedBonus(0); setNewBadgesList([]);
@@ -185,10 +185,10 @@ export default function App() {
     }
 
     if (qIndex + 1 >= questions.length) {
-      if (!match && userId && category) {
+      if (!match && userId) {
         try {
           const { newBadges } = await saveSession(
-            userId, category?.id ?? 0, difficulty, newScore, newCorr, newBest, speedBonus + bonus, questions,
+            userId, 0, difficulty, newScore, newCorr, newBest, speedBonus + bonus, questions,
           );
           if (newScore > prevBest) {
             setPrevBest(newScore);
@@ -210,13 +210,13 @@ export default function App() {
   }
 
   // ── H2H: create ───────────────────────────────────────────────
-  async function handleCreateMatch(cat: Category | null, diff: string, count = 10) {
+  async function handleCreateMatch(diff: string, count = 10) {
     if (!userId || !profile) return;
-    setCategory(cat); setDifficulty(diff);
+    setCategory(null); setDifficulty(diff);
     setScreen('loading');
     try {
-      const m = await createMatch(userId, profile.display_name, cat, diff, count);
-      setMatch({ ...m, status: 'waiting', category_id: cat?.id ?? 0, difficulty: DIFF_MAP_REVERSE[diff] || diff });
+      const m = await createMatch(userId, profile.display_name, null, diff, count);
+      setMatch({ ...m, status: 'waiting', category_id: 0, difficulty: DIFF_MAP_REVERSE[diff] || diff });
       setIsHost(true);
       subscribeToMatch(m.id);
       const { data: qs } = await sb.from('matches').select('question_set').eq('id', m.id).single();
@@ -351,8 +351,8 @@ export default function App() {
               fastestSecs={fastestSecs === TIMER_TOTAL ? TIMER_TOTAL : fastestSecs}
               bestStreak={bestStreak} speedBonus={speedBonus}
               prevBest={prevBest}
-              categoryId={category?.id ?? 0}
-              onReplay={() => startSolo(category, difficulty, questions.length)}
+              categoryId={0}
+              onReplay={() => startSolo(difficulty, questions.length)}
               onChallenge={() => setScreen('challengeMenu')}
               matchWinner={matchWinner}
               newBadges={newBadgesList}
