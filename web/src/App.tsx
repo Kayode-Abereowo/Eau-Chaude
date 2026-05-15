@@ -1,11 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
 import { sb } from './supabase';
 import {
-  TIMER_TOTAL, getQuestionTime, type Profile, type Badge, type Question,
+  TIMER_TOTAL, getQuestionTime, type Profile, type Badge, type Question, type Category,
 } from './constants';
 import {
   getSession, loadProfile, updateDisplayName, buildSession,
-  saveSession, createMatch, joinMatch, startMatch, updatePlayerScore, claimMatchWinner,
+  saveSession, createMatch, joinMatch, startMatch, updatePlayerScore, finalizeMatch,
 } from './api';
 import { IOSDevice }            from './components/IOSDevice';
 import { LoadingScreen }        from './screens/LoadingScreen';
@@ -24,7 +24,7 @@ import { AdminScreen }          from './screens/AdminScreen';
 
 type Screen =
   | 'boot' | 'auth' | 'nameSetup' | 'home'
-  | 'category' | 'category-h2h' | 'loading' | 'question' | 'results'
+  | 'category' | 'category-h2h' | 'loading' | 'question' | 'results' | 'h2h-waiting'
   | 'challengeMenu' | 'join' | 'lobby'
   | 'leaderboard' | 'profile' | 'admin';
 
@@ -44,7 +44,7 @@ export default function App() {
   const [screen, setScreen] = useState<Screen>('boot');
 
   // ── Solo session ─────────────────────────────────────────────
-  const [category,    setCategory]    = useState<null>(null);
+  const [category,    setCategory]    = useState<Category | null>(null);
   const [difficulty,  setDifficulty]  = useState('Medium');
   const [timerTotal,  setTimerTotal]  = useState(TIMER_TOTAL);
   const [questions,   setQuestions]   = useState<Question[]>([]);
@@ -65,7 +65,8 @@ export default function App() {
   const [opponentScore, setOpponentScore] = useState<number | undefined>(undefined);
   const [matchWinner,  setMatchWinner]  = useState<'you' | 'opponent' | null>(null);
   const [joinLoading,  setJoinLoading]  = useState(false);
-  const channelRef = useRef<ReturnType<typeof sb.channel> | null>(null);
+  const channelRef    = useRef<ReturnType<typeof sb.channel> | null>(null);
+  const myCompletedRef = useRef(false);
 
   // ── Admin tap ─────────────────────────────────────────────────
   const [monogramTaps, setMonogramTaps] = useState(0);
@@ -156,10 +157,10 @@ export default function App() {
   }
 
   // ── Solo game ─────────────────────────────────────────────────
-  async function startSolo(diff: string, count = 10) {
-    setCategory(null); setDifficulty(diff); setTimerTotal(getQuestionTime(diff, count));
+  async function startSolo(diff: string, count = 10, cat: Category | null = null) {
+    setCategory(cat); setDifficulty(diff); setTimerTotal(getQuestionTime(diff, count));
     setScreen('loading');
-    const qs = await buildSession(null, diff, count);
+    const qs = await buildSession(cat, diff, count);
     setQuestions(qs); setQIndex(0);
     setScore(0); setCorrect(0); setFastestSecs(TIMER_TOTAL);
     setBestStreak(0); setCurStreak(0); setSpeedBonus(0); setNewBadgesList([]);
@@ -181,11 +182,18 @@ export default function App() {
     setCurStreak(newStrk); setBestStreak(newBest);
     setSpeedBonus(prev => prev + bonus); setFastestSecs(newFast);
 
+    const isLast = qIndex + 1 >= questions.length;
+
     if (match && userId) {
-      updatePlayerScore(match.id, userId, newScore, qIndex + 1, qIndex + 1 >= questions.length);
+      if (isLast) {
+        // Await so completed=true is in DB before we call finalizeMatch
+        await updatePlayerScore(match.id, userId, newScore, qIndex + 1, true);
+      } else {
+        updatePlayerScore(match.id, userId, newScore, qIndex + 1, false);
+      }
     }
 
-    if (qIndex + 1 >= questions.length) {
+    if (isLast) {
       if (!match && userId) {
         try {
           const { newBadges } = await saveSession(
@@ -200,22 +208,30 @@ export default function App() {
         } catch (e) { console.error('saveSession failed:', e); }
       }
       if (match && userId) {
-        const won = await claimMatchWinner(match.id, userId);
-        setMatchWinner(won ? 'you' : 'opponent');
+        myCompletedRef.current = true;
+        const winnerId = await finalizeMatch(match.id);
+        if (winnerId !== null) {
+          setMatchWinner(winnerId === userId ? 'you' : 'opponent');
+          setTimeout(() => setScreen('results'), 420);
+        } else {
+          // Opponent not done yet — wait for them
+          setTimeout(() => setScreen('h2h-waiting'), 420);
+        }
+      } else if (!match) {
+        setTimeout(() => setScreen('results'), 420);
       }
-      setTimeout(() => setScreen('results'), 420);
     } else {
       setQIndex(i => i + 1);
     }
   }
 
   // ── H2H: create ───────────────────────────────────────────────
-  async function handleCreateMatch(diff: string, count = 10) {
+  async function handleCreateMatch(diff: string, count = 10, cat: Category | null = null) {
     if (!userId || !profile) return;
-    setCategory(null); setDifficulty(diff); setTimerTotal(getQuestionTime(diff, count));
+    setCategory(cat); setDifficulty(diff); setTimerTotal(getQuestionTime(diff, count));
     setScreen('loading');
     try {
-      const m = await createMatch(userId, profile.display_name, null, diff, count);
+      const m = await createMatch(userId, profile.display_name, cat, diff, count);
       setMatch({ ...m, status: 'waiting', category_id: 0, difficulty: DIFF_MAP_REVERSE[diff] || diff });
       setIsHost(true);
       subscribeToMatch(m.id, userId);
@@ -261,12 +277,23 @@ export default function App() {
     channelRef.current = sb.channel(`match-${matchId}`)
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'match_players', filter: `match_id=eq.${matchId}` },
         payload => {
-          const updated = payload.new as PlayerState;
+          const updated = payload.new as (PlayerState & { completed?: boolean });
           setMatchPlayers(prev => {
             const next = prev.map(p => p.id === updated.id ? { ...p, ...updated } : p);
             return next.find(p => p.id === updated.id) ? next : [...prev, updated];
           });
-          if (updated.user_id !== uid) setOpponentScore(updated.score);
+          if (updated.user_id !== uid) {
+            setOpponentScore(updated.score);
+            // Opponent finished — if I'm also done, finalize immediately
+            if (updated.completed && myCompletedRef.current) {
+              finalizeMatch(matchId).then(winnerId => {
+                if (winnerId) {
+                  setMatchWinner(winnerId === uid ? 'you' : 'opponent');
+                  setScreen('results');
+                }
+              });
+            }
+          }
         })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'matches', filter: `id=eq.${matchId}` },
         payload => {
@@ -277,19 +304,25 @@ export default function App() {
             setFastestSecs(TIMER_TOTAL); setBestStreak(0); setCurStreak(0); setSpeedBonus(0);
             setTimeout(() => setScreen('question'), 3200);
           }
-          // Opponent finished first — pull current player to results
-          if (m.status === 'complete' && m.winner_id && m.winner_id !== uid) {
-            setMatchWinner('opponent');
-            setTimeout(() => setScreen('results'), 600);
+          // Match finalized — pull any waiting player to results
+          if (m.status === 'completed' && m.winner_id) {
+            setMatchWinner(m.winner_id === uid ? 'you' : 'opponent');
+            setTimeout(() => setScreen('results'), 420);
           }
         })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'match_players', filter: `match_id=eq.${matchId}` },
-        payload => { setMatchPlayers(prev => [...prev, payload.new as PlayerState]); })
+        async payload => {
+          setMatchPlayers(prev => [...prev, payload.new as PlayerState]);
+          // Guest joining triggers personal question injection — re-fetch so host gets updated set
+          const { data } = await sb.from('matches').select('question_set').eq('id', matchId).single();
+          if (data) setQuestions((data as any).question_set || []);
+        })
       .subscribe();
   }
 
   async function handleStartMatch() {
     if (!match) return;
+    myCompletedRef.current = false;
     await startMatch(match.id);
     setQIndex(0); setScore(0); setCorrect(0);
     setFastestSecs(TIMER_TOTAL); setBestStreak(0); setCurStreak(0); setSpeedBonus(0);
@@ -353,6 +386,19 @@ export default function App() {
               onExit={() => setScreen('home')}
               opponentScore={match ? opponentScore_ : undefined}
             />
+          )}
+
+          {screen === 'h2h-waiting' && (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center',
+              justifyContent: 'center', gap: 16, background: '#F4EEE6', width: '100%', height: '100%' }}>
+              <div style={{ fontFamily: 'CormorantGaramond, serif', fontStyle: 'italic', fontSize: 22,
+                color: '#1A2326', textAlign: 'center', padding: '0 28px' }}>
+                Waiting for your opponent to finish…
+              </div>
+              <div style={{ fontFamily: 'CormorantGaramond, serif', fontSize: 13, color: 'rgba(26,35,38,0.55)' }}>
+                Results will appear when both players are done.
+              </div>
+            </div>
           )}
 
           {screen === 'results' && (

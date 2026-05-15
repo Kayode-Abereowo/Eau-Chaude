@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
-import { EC, F, LETTERS, TIMER_TOTAL } from '../constants';
+import { EC, F, LETTERS } from '../constants';
 import type { Question } from '../constants';
 import { ECHair, ECMono, ECSmallCaps } from '../components/atoms';
 import { TimerArc } from '../components/TimerArc';
@@ -12,25 +12,24 @@ interface Props {
   totalQs: number;
   score: number;
   difficulty: string;
+  timerTotal: number;
   opponentScore?: number;
   onAnswer: (isCorrect: boolean, pts: number, timeAtAnswer: number) => void;
   onExit: () => void;
 }
 
-export function QuestionScreen({ question, qIndex, totalQs, score, difficulty, opponentScore, onAnswer, onExit }: Props) {
-  const [timeLeft,  setTimeLeft]  = useState(TIMER_TOTAL);
+export function QuestionScreen({ question, qIndex, totalQs, score, difficulty, timerTotal, opponentScore, onAnswer, onExit }: Props) {
+  const [timeLeft,  setTimeLeft]  = useState(timerTotal);
   const [chosen,    setChosen]    = useState<number | null>(null);
   const [revealed,  setRevealed]  = useState(false);
-  const timerRef        = useRef<ReturnType<typeof setInterval> | null>(null);
-  const timeAtAnswerRef = useRef(TIMER_TOTAL);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const personal = !!question.personal;
   const dark     = personal;
 
   useEffect(() => {
-    setTimeLeft(TIMER_TOTAL); setChosen(null); setRevealed(false);
-    timeAtAnswerRef.current = TIMER_TOTAL;
-  }, [question]);
+    setTimeLeft(timerTotal); setChosen(null); setRevealed(false);
+  }, [question, timerTotal]);
 
   useEffect(() => {
     if (revealed) return;
@@ -51,12 +50,12 @@ export function QuestionScreen({ question, qIndex, totalQs, score, difficulty, o
   function handleSelect(idx: number) {
     if (revealed) return;
     clearInterval(timerRef.current!);
-    timeAtAnswerRef.current = timeLeft;
+    const tl = timeLeft;
     setChosen(idx); setRevealed(true);
     const correct = idx === question.correct_index;
     const base    = difficulty === 'Hard' ? 300 : difficulty === 'Medium' ? 200 : 100;
-    const pts     = correct ? base + Math.round(base * (timeLeft / TIMER_TOTAL) * 0.5) : 0;
-    setTimeout(() => onAnswer(correct, pts, timeLeft), 950);
+    const pts     = correct ? base + Math.round(base * (tl / timerTotal) * 0.5) : 0;
+    setTimeout(() => onAnswer(correct, pts, tl), 950);
   }
 
   function tileState(idx: number): 'idle' | 'selected' | 'correct' | 'wrong' {
@@ -80,7 +79,7 @@ export function QuestionScreen({ question, qIndex, totalQs, score, difficulty, o
               {personal ? 'A personal question' : difficulty}
             </ECSmallCaps>
           </View>
-          <TimerArc remaining={timeLeft} dark={dark} />
+          <TimerArc remaining={timeLeft} timerTotal={timerTotal} dark={dark} />
         </View>
         <View style={{ height: 1, backgroundColor: dark ? EC.tealLine : EC.creamLine, marginTop: 14 }} />
       </View>
@@ -132,11 +131,11 @@ export function QuestionScreen({ question, qIndex, totalQs, score, difficulty, o
       {/* Footer */}
       <View style={{ paddingHorizontal: 28, paddingTop: 12, paddingBottom: 24, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
         <ECSmallCaps color={dark ? EC.onTealFaint : EC.inkFaint} size={9}>
-          {personal ? 'Personal · Sparingly served' : 'Streak'}
+          {personal ? 'Personal · Sparingly served' : 'Progress'}
         </ECSmallCaps>
         {!personal && (
-          <View style={{ flexDirection: 'row', gap: 5 }}>
-            {Array.from({ length: 10 }).map((_, i) => (
+          <View style={{ flexDirection: 'row', gap: 4, flexWrap: 'wrap', justifyContent: 'flex-end', maxWidth: 180 }}>
+            {Array.from({ length: totalQs }).map((_, i) => (
               <View key={i} style={{ width: 6, height: 6, borderRadius: 3,
                 backgroundColor: i < qIndex ? EC.teal : EC.creamLine }} />
             ))}

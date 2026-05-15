@@ -33,17 +33,12 @@ export function LeaderboardScreen({ userId, onBack }: Props) {
         const { data } = await sb.from('weekly_leaderboard').select('user_id,display_name,score,games_played,rank').order('rank').limit(50);
         setRows(data || []);
       } else {
-        const { data } = await sb.from('h2h_leaderboard').select('user_id,display_name,wins,losses,rank').order('rank').limit(50);
+        const { data } = await sb.rpc('get_rivalry_records', { p_user_id: userId });
         setRows(data || []);
       }
       setLoading(false);
     })();
-  }, [tab]);
-
-  function rowValue(r: any) {
-    if (tab === 'h2h') return `${r.wins}W · ${r.losses}L`;
-    return (r.score || 0).toLocaleString();
-  }
+  }, [tab, userId]);
 
   return (
     <View style={{ flex: 1, backgroundColor: EC.cream }}>
@@ -67,34 +62,77 @@ export function LeaderboardScreen({ userId, onBack }: Props) {
         ))}
       </View>
 
+      {tab === 'h2h' && (
+        <View style={{ paddingHorizontal: 24, paddingTop: 10 }}>
+          <Text style={{ fontFamily: F.serifItalic, fontSize: 12, color: EC.inkSoft }}>
+            Your head-to-head record against each opponent.
+          </Text>
+        </View>
+      )}
+
       {loading ? <Spinner /> : (
         <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
           {rows.length === 0 && (
             <View style={{ padding: 40, alignItems: 'center' }}>
               <Text style={{ fontFamily: F.serifItalic, fontSize: 15, color: EC.inkSoft }}>
-                No scores recorded yet.
+                {tab === 'h2h' ? 'No H2H matches played yet.' : 'No scores recorded yet.'}
               </Text>
             </View>
           )}
-          {rows.map((r, i) => {
-            const isMe = r.user_id === userId;
-            return (
-              <View key={r.user_id || i} style={{
-                flexDirection: 'row', alignItems: 'center',
-                paddingVertical: 13, paddingHorizontal: 24,
-                backgroundColor: isMe ? EC.tealSoft : 'transparent',
-                borderBottomWidth: 1, borderBottomColor: EC.creamLine,
-              }}>
-                <ECMono color={isMe ? EC.teal : EC.inkFaint} size={12} style={{ width: 28 }}>
-                  {String(r.rank).padStart(2, '0')}
-                </ECMono>
-                <Text style={{ flex: 1, fontFamily: isMe ? F.serifItalic : F.serif, fontSize: 16, color: EC.ink }}>
-                  {r.display_name || '—'}{isMe ? ' (you)' : ''}
-                </Text>
-                <ECMono color={isMe ? EC.teal : EC.ink} size={13}>{rowValue(r)}</ECMono>
-              </View>
-            );
-          })}
+
+          {tab === 'h2h' ? (
+            rows.map((r, i) => {
+              const myW    = Number(r.my_wins);
+              const theirW = Number(r.their_wins);
+              const total  = Number(r.total);
+              const iAhead = myW > theirW;
+              const tied   = myW === theirW;
+              return (
+                <View key={r.opponent_id || i} style={{ paddingVertical: 14, paddingHorizontal: 24,
+                  borderBottomWidth: 1, borderBottomColor: EC.creamLine }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <Text style={{ fontFamily: F.serif, fontSize: 16, color: EC.ink }}>{r.opponent_name}</Text>
+                    <ECMono color={iAhead ? EC.teal : tied ? EC.inkSoft : EC.heart} size={12}>
+                      {myW}W · {theirW}L
+                    </ECMono>
+                  </View>
+                  <View style={{ marginTop: 8, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <View style={{ flex: 1, height: 4, backgroundColor: EC.creamLine, borderRadius: 4, overflow: 'hidden' }}>
+                      <View style={{
+                        height: '100%', borderRadius: 4,
+                        backgroundColor: iAhead ? EC.teal : tied ? EC.inkFaint : EC.heart,
+                        width: total > 0 ? `${(myW / total) * 100}%` : '0%' as any,
+                      }} />
+                    </View>
+                    <ECSmallCaps color={EC.inkFaint} size={8}>{total} played</ECSmallCaps>
+                  </View>
+                </View>
+              );
+            })
+          ) : (
+            rows.map((r, i) => {
+              const isMe = r.user_id === userId;
+              const val  = tab === 'weekly'
+                ? `${(r.score || 0).toLocaleString()} · ${r.games_played ?? 0}g`
+                : (r.score || 0).toLocaleString();
+              return (
+                <View key={r.user_id || i} style={{
+                  flexDirection: 'row', alignItems: 'center',
+                  paddingVertical: 13, paddingHorizontal: 24,
+                  backgroundColor: isMe ? EC.tealSoft : 'transparent',
+                  borderBottomWidth: 1, borderBottomColor: EC.creamLine,
+                }}>
+                  <ECMono color={isMe ? EC.teal : EC.inkFaint} size={12} style={{ width: 28 }}>
+                    {String(r.rank).padStart(2, '0')}
+                  </ECMono>
+                  <Text style={{ flex: 1, fontFamily: isMe ? F.serifItalic : F.serif, fontSize: 16, color: EC.ink }}>
+                    {r.display_name || '—'}{isMe ? ' (you)' : ''}
+                  </Text>
+                  <ECMono color={isMe ? EC.teal : EC.ink} size={13}>{val}</ECMono>
+                </View>
+              );
+            })
+          )}
           <View style={{ height: 20 }} />
         </ScrollView>
       )}

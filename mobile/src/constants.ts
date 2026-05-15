@@ -32,6 +32,12 @@ export const DIFF_MAP: Record<string, string> = {
   Hard: 'hard',
 };
 
+export function getQuestionTime(difficulty: string, count: number): number {
+  const base = difficulty === 'Hard' ? 10 : difficulty === 'Medium' ? 15 : 20;
+  const adj  = Math.round(-(count - 10) / 5);
+  return Math.max(6, base + adj);
+}
+
 export type Category = {
   id: number;
   n: string;
@@ -79,11 +85,12 @@ export type Match = {
   id: string;
   code: string;
   host_id: string;
-  category_id: number;
+  category_id: number | null;
   difficulty: string;
-  status: 'waiting' | 'active' | 'finished';
+  status: 'waiting' | 'active' | 'completed' | 'cancelled';
   question_set: Question[];
   started_at: string | null;
+  winner_id?: string | null;
 };
 
 export const CATEGORIES_LIST: Category[] = [
@@ -101,6 +108,7 @@ export const CATEGORIES_LIST: Category[] = [
   { id: 12, n: 'XII',  name: 'Politics & Society',  count: 175,  opentdb_id: 24  },
   { id: 13, n: 'XIII', name: 'Technology',          count: 125,  opentdb_id: 18  },
   { id: 14, n: 'XIV',  name: 'Art & Culture',       count: 108,  opentdb_id: 25  },
+  { id: 15, n: 'XV',   name: 'Bible Trivia',        count: 239,  opentdb_id: null},
 ];
 
 export const LOCAL_FALLBACK: Question[] = [

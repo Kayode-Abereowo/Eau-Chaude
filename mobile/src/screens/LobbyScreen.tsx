@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { CATEGORIES_LIST, EC, F, Match, MatchPlayer } from '../constants';
+import { EC, F, Match, MatchPlayer } from '../constants';
 import { ECHair, ECMono, ECPageHeader, ECSmallCaps } from '../components/atoms';
 
 function PlayerCard({ name, initial, you, host, status, dark }: {
@@ -36,13 +36,12 @@ interface Props {
 }
 
 export function LobbyScreen({ match, players, currentUserId, isHost, onStart, onHome }: Props) {
-  const [copied,   setCopied]   = useState(false);
-  const insets    = useSafeAreaInsets();
-  const starting  = match.status === 'active';
-  const me        = players.find(p => p.user_id === currentUserId);
-  const opponent  = players.find(p => p.user_id !== currentUserId);
+  const [copied,  setCopied]  = useState(false);
+  const insets   = useSafeAreaInsets();
+  const starting = match.status === 'active';
+  const me       = players.find(p => p.user_id === currentUserId);
+  const opponent = players.find(p => p.user_id !== currentUserId);
   const bothReady = players.length >= 2;
-  const catName   = CATEGORIES_LIST.find(c => c.id === match.category_id)?.name || '';
 
   async function copyCode() {
     await Clipboard.setStringAsync(`Join me on Eau Claude! Code: ${match.code}`);
@@ -68,7 +67,7 @@ export function LobbyScreen({ match, players, currentUserId, isHost, onStart, on
         </Text>
         <Text style={{ marginTop: 5, fontFamily: F.serifItalic, fontSize: 13,
           color: starting ? EC.onTealSoft : EC.inkSoft }}>
-          {`Ten questions · ${catName} · ${match.difficulty}`}
+          {`All subjects · ${match.difficulty}`}
         </Text>
       </View>
 
@@ -83,8 +82,8 @@ export function LobbyScreen({ match, players, currentUserId, isHost, onStart, on
           <Text style={{ fontFamily: F.serifItalic, fontSize: 20, color: starting ? EC.cream : EC.ink, opacity: 0.6 }}>vs</Text>
         </View>
         <PlayerCard
-          name={opponent?.display_name || 'Claude'}
-          initial={(opponent?.display_name || 'C')[0]}
+          name={opponent?.display_name || 'Opponent'}
+          initial={(opponent?.display_name || 'O')[0]}
           status={opponent ? 'Ready' : 'Connecting…'}
           dark={starting}
         />
@@ -104,7 +103,7 @@ export function LobbyScreen({ match, players, currentUserId, isHost, onStart, on
               <ECMono color={EC.onTealFaint} size={14}>1</ECMono>
             </View>
           </>
-        ) : (
+        ) : isHost ? (
           <>
             <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: EC.teal, opacity: 0.5, marginBottom: 12 }} />
             <ECSmallCaps color={EC.inkFaint} size={10}>
@@ -113,8 +112,17 @@ export function LobbyScreen({ match, players, currentUserId, isHost, onStart, on
             <Text style={{ marginTop: 12, fontFamily: F.serifItalic, fontSize: 14,
               color: EC.inkSoft, textAlign: 'center', maxWidth: 240 }}>
               {bothReady
-                ? 'Host can start the match when ready.'
-                : 'Your invitation has been sent.\nThey have until the kettle whistles.'}
+                ? 'Start the match when you\'re ready.'
+                : 'Share the code below. They have until the kettle whistles.'}
+            </Text>
+          </>
+        ) : (
+          <>
+            <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: EC.teal, opacity: 0.5, marginBottom: 12 }} />
+            <ECSmallCaps color={EC.teal} size={10}>You've joined</ECSmallCaps>
+            <Text style={{ marginTop: 12, fontFamily: F.serifItalic, fontSize: 14,
+              color: EC.inkSoft, textAlign: 'center', maxWidth: 240 }}>
+              Waiting for the host to start the match…
             </Text>
           </>
         )}
@@ -122,8 +130,9 @@ export function LobbyScreen({ match, players, currentUserId, isHost, onStart, on
 
       {/* Bottom */}
       <View style={{ paddingHorizontal: 24, paddingBottom: insets.bottom + 16 }}>
-        {!starting && (
+        {!starting && isHost && (
           <>
+            {/* Join code — host only */}
             <Pressable onPress={copyCode} style={{
               borderWidth: 1, borderColor: EC.creamLine, borderRadius: 6,
               padding: 12, paddingHorizontal: 15, flexDirection: 'row',
@@ -131,28 +140,30 @@ export function LobbyScreen({ match, players, currentUserId, isHost, onStart, on
             }}>
               <View style={{ flex: 1 }}>
                 <ECSmallCaps color={EC.inkFaint} size={9}>Match code</ECSmallCaps>
-                <View style={{ marginTop: 3 }}>
-                  <ECMono color={EC.ink} size={18}>{match.code}</ECMono>
+                <View style={{ marginTop: 4 }}>
+                  <ECMono color={EC.teal} size={28}>{match.code}</ECMono>
                 </View>
               </View>
               <ECSmallCaps color={EC.teal} size={10}>{copied ? 'Copied ✓' : 'Copy invite'}</ECSmallCaps>
             </Pressable>
-            {isHost ? (
-              <Pressable onPress={onStart} disabled={!bothReady} style={{
-                width: '100%', height: 52,
-                backgroundColor: bothReady ? EC.teal : 'rgba(14,106,120,0.3)',
-                borderRadius: 6, alignItems: 'center', justifyContent: 'center',
-              }}>
-                <Text style={{ fontFamily: F.serif, fontSize: 18, color: EC.cream }}>
-                  {bothReady ? 'Start match →' : 'Waiting for opponent…'}
-                </Text>
-              </Pressable>
-            ) : (
-              <View style={{ height: 52, alignItems: 'center', justifyContent: 'center' }}>
-                <ECSmallCaps color={EC.inkFaint} size={10}>Waiting for host to start…</ECSmallCaps>
-              </View>
-            )}
+            <Pressable onPress={onStart} disabled={!bothReady} style={{
+              width: '100%', height: 52,
+              backgroundColor: bothReady ? EC.teal : 'rgba(14,106,120,0.3)',
+              borderRadius: 6, alignItems: 'center', justifyContent: 'center',
+            }}>
+              <Text style={{ fontFamily: F.serif, fontSize: 18, color: EC.cream }}>
+                {bothReady ? 'Start match →' : 'Waiting for opponent…'}
+              </Text>
+            </Pressable>
           </>
+        )}
+        {!starting && !isHost && (
+          <Pressable onPress={onHome} style={{
+            width: '100%', height: 48, borderWidth: 1, borderColor: EC.creamLine,
+            borderRadius: 6, alignItems: 'center', justifyContent: 'center',
+          }}>
+            <Text style={{ fontFamily: F.serif, fontSize: 16, color: EC.inkSoft }}>← Leave</Text>
+          </Pressable>
         )}
       </View>
     </View>

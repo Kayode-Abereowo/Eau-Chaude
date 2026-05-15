@@ -51,6 +51,7 @@ export const CATEGORIES_LIST: Category[] = [
   { id: 12, n: 'XII',  name: 'Politics & Society', count: 175,  opentdb_id: 24  },
   { id: 13, n: 'XIII', name: 'Technology',         count: 125,  opentdb_id: 18  },
   { id: 14, n: 'XIV',  name: 'Art & Culture',      count: 108,  opentdb_id: 25  },
+  { id: 15, n: 'XV',   name: 'Bible Trivia',       count: 239,  opentdb_id: null},
 ];
 
 export interface Profile {

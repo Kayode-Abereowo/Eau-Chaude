@@ -14,15 +14,18 @@ import { DMMono_400Regular } from '@expo-google-fonts/dm-mono';
 
 import { sb } from './src/supabase';
 import {
-  ensureAuth, loadProfile, updateDisplayName, buildSession,
-  saveSession, createMatch, joinMatch, startMatch, updatePlayerScore,
+  signIn, signUp, getSession,
+  loadProfile, updateDisplayName, buildSession,
+  saveSession, createMatch, joinMatch, startMatch,
+  finalizeMatch, updatePlayerScore,
 } from './src/api';
 import {
-  Badge, Category, EC, F, Match, MatchPlayer, Profile, Question, TIMER_TOTAL,
+  Badge, EC, F, getQuestionTime, Match, MatchPlayer, Profile, Question,
 } from './src/constants';
 import { Spinner } from './src/components/atoms';
 
-import { NameSetupScreen }  from './src/screens/NameSetupScreen';
+import { AuthScreen }        from './src/screens/AuthScreen';
+import { NameSetupScreen }   from './src/screens/NameSetupScreen';
 import { HomeScreen }        from './src/screens/HomeScreen';
 import { CategoryScreen }    from './src/screens/CategoryScreen';
 import { LoadingScreen }     from './src/screens/LoadingScreen';
@@ -35,8 +38,8 @@ import { ProfileScreen }     from './src/screens/ProfileScreen';
 import { AdminScreen }       from './src/screens/AdminScreen';
 
 type Screen =
-  | 'nameSetup' | 'home' | 'category' | 'category-h2h' | 'challengeMenu'
-  | 'join' | 'loading' | 'question' | 'results' | 'lobby'
+  | 'auth' | 'nameSetup' | 'home' | 'category' | 'category-h2h' | 'challengeMenu'
+  | 'join' | 'loading' | 'question' | 'results' | 'h2h-waiting' | 'lobby'
   | 'leaderboard' | 'profile' | 'admin';
 
 export default function App() {
@@ -58,17 +61,17 @@ export default function App() {
   const [newBadgesList, setNewBadgesList] = useState<string[]>([]);
 
   // ── Navigation ────────────────────────────────────────────────
-  const [screen,   setScreen]   = useState<Screen>('home');
+  const [screen,   setScreen]   = useState<Screen>('auth');
   const [prevBest, setPrevBest] = useState(0);
 
   // ── Solo session ──────────────────────────────────────────────
-  const [category,    setCategory]    = useState<Category | null>(null);
   const [difficulty,  setDifficulty]  = useState('Medium');
+  const [timerTotal,  setTimerTotal]  = useState(15);
   const [questions,   setQuestions]   = useState<Question[]>([]);
   const [qIndex,      setQIndex]      = useState(0);
   const [score,       setScore]       = useState(0);
   const [correct,     setCorrect]     = useState(0);
-  const [fastestSecs, setFastestSecs] = useState(TIMER_TOTAL);
+  const [fastestSecs, setFastestSecs] = useState(9999);
   const [bestStreak,  setBestStreak]  = useState(0);
   const [curStreak,   setCurStreak]   = useState(0);
   const [speedBonus,  setSpeedBonus]  = useState(0);
@@ -80,7 +83,8 @@ export default function App() {
   const [opponentScore, setOpponentScore] = useState<number | undefined>(undefined);
   const [matchWinner,   setMatchWinner]   = useState<'you' | 'opponent' | null>(null);
   const [joinLoading,   setJoinLoading]   = useState(false);
-  const channelRef = useRef<any>(null);
+  const channelRef     = useRef<any>(null);
+  const myCompletedRef = useRef(false);
 
   // ── Admin tap counter ─────────────────────────────────────────
   const [monogramTaps,  setMonogramTaps]  = useState(0);
@@ -90,22 +94,36 @@ export default function App() {
   useEffect(() => {
     (async () => {
       try {
-        const [u] = await Promise.all([
-          ensureAuth(),
+        const [session] = await Promise.all([
+          getSession(),
           sb.from('badges').select('*').then(({ data }) => setAllBadges((data as Badge[]) || [])),
         ]);
-        setUser(u);
-        const p = await loadProfile(u.id);
-        setProfile(p);
-        setPrevBest(p?.personal_best || 0);
-        if (!p?.display_name || p.display_name === 'Player') setScreen('nameSetup');
+        if (session?.user) {
+          setUser(session.user);
+          const p = await loadProfile(session.user.id);
+          setProfile(p);
+          setPrevBest(p?.personal_best || 0);
+          setScreen(!p?.display_name || p.display_name === 'Player' ? 'nameSetup' : 'home');
+        } else {
+          setScreen('auth');
+        }
       } catch (e) {
-        console.error('Auth failed:', e);
+        console.error('Boot failed:', e);
+        setScreen('auth');
       } finally {
         setAuthReady(true);
       }
     })();
   }, []);
+
+  // ── Auth ──────────────────────────────────────────────────────
+  async function handleAuth(u: any) {
+    setUser(u);
+    const p = await loadProfile(u.id);
+    setProfile(p);
+    setPrevBest(p?.personal_best || 0);
+    setScreen(!p?.display_name || p.display_name === 'Player' ? 'nameSetup' : 'home');
+  }
 
   // ── Name setup ────────────────────────────────────────────────
   async function handleNameSave(name: string) {
@@ -125,13 +143,15 @@ export default function App() {
   }
 
   // ── Solo game ─────────────────────────────────────────────────
-  async function startSolo(cat: Category, diff: string) {
-    setCategory(cat); setDifficulty(diff);
+  async function startSolo(diff: string, count: number, categoryId: number | null = null) {
+    setDifficulty(diff);
+    const tt = getQuestionTime(diff, count);
+    setTimerTotal(tt);
     setScreen('loading');
-    const qs = await buildSession(cat.id, cat.opentdb_id, diff);
+    const qs = await buildSession(diff, count, categoryId);
     setQuestions(qs); setQIndex(0);
     setScore(0); setCorrect(0);
-    setFastestSecs(TIMER_TOTAL); setBestStreak(0); setCurStreak(0); setSpeedBonus(0);
+    setFastestSecs(9999); setBestStreak(0); setCurStreak(0); setSpeedBonus(0);
     setScreen('question');
   }
 
@@ -142,22 +162,29 @@ export default function App() {
     const newCorr  = correct + (isCorrect ? 1 : 0);
     const newStrk  = isCorrect ? curStreak + 1 : 0;
     const newBest  = Math.max(bestStreak, newStrk);
-    const newFast  = isCorrect && timeAtAnswer > 0
-      ? Math.min(fastestSecs, TIMER_TOTAL - timeAtAnswer + 0.1)
-      : fastestSecs;
+    const elapsed  = timerTotal - timeAtAnswer;
+    const newFast  = isCorrect && timeAtAnswer > 0 ? Math.min(fastestSecs, elapsed) : fastestSecs;
 
     setScore(newScore); setCorrect(newCorr);
     setCurStreak(newStrk); setBestStreak(newBest);
     setSpeedBonus(prev => prev + bonus);
     setFastestSecs(newFast);
 
-    if (match) updatePlayerScore(match.id, user.id, newScore, qIndex + 1, qIndex + 1 >= questions.length);
+    const isLast = qIndex + 1 >= questions.length;
 
-    if (qIndex + 1 >= questions.length) {
-      if (!match && category) {
+    if (match) {
+      if (isLast) {
+        await updatePlayerScore(match.id, user.id, newScore, qIndex + 1, true);
+      } else {
+        updatePlayerScore(match.id, user.id, newScore, qIndex + 1, false);
+      }
+    }
+
+    if (isLast) {
+      if (!match) {
         try {
           const { newBadges } = await saveSession(
-            user.id, category.id, difficulty, newScore, newCorr, newBest, speedBonus + bonus, questions
+            user.id, difficulty, newScore, newCorr, newBest, speedBonus + bonus, questions
           );
           if (newScore > prevBest) { setPrevBest(newScore); setProfile(p => p ? { ...p, personal_best: newScore } : p); }
           if (newBadges.length > 0) setNewBadgesList(newBadges);
@@ -165,24 +192,33 @@ export default function App() {
         } catch (e) { console.error('saveSession failed:', e); }
       }
       if (match) {
-        sb.rpc('complete_match', { p_match_id: match.id });
-        const opp = matchPlayers.find(p => p.user_id !== user.id);
-        setMatchWinner(opp && newScore > opp.score ? 'you' : 'opponent');
+        myCompletedRef.current = true;
+        const winnerId = await finalizeMatch(match.id);
+        if (winnerId !== null) {
+          setMatchWinner(winnerId === user.id ? 'you' : 'opponent');
+          loadProfile(user.id).then(p => p && setProfile(p));
+          setTimeout(() => setScreen('results'), 420);
+        } else {
+          setTimeout(() => setScreen('h2h-waiting'), 420);
+        }
+      } else {
+        setTimeout(() => setScreen('results'), 420);
       }
-      setTimeout(() => setScreen('results'), 420);
     } else {
       setQIndex(i => i + 1);
     }
   }
 
   // ── H2H: create ───────────────────────────────────────────────
-  async function handleCreateMatch(cat: Category, diff: string) {
-    setCategory(cat); setDifficulty(diff);
+  async function handleCreateMatch(diff: string, count: number, categoryId: number | null = null) {
+    setDifficulty(diff);
+    const tt = getQuestionTime(diff, count);
+    setTimerTotal(tt);
     setScreen('loading');
     try {
-      const m = await createMatch(user.id, profile?.display_name || 'Eau', cat, diff);
+      const m = await createMatch(user.id, profile?.display_name || 'Eau', diff, count, categoryId);
       setMatch(m); setIsHost(true);
-      subscribeToMatch(m.id);
+      subscribeToMatch(m.id, user.id);
       const { data: qs } = await sb.from('matches').select('question_set').eq('id', m.id).single();
       setQuestions((qs as any)?.question_set || []);
       const { data: players } = await sb.from('match_players').select('*').eq('match_id', m.id);
@@ -194,14 +230,14 @@ export default function App() {
     }
   }
 
-  // ── H2H: join ────────────────────────────────────────────────
+  // ── H2H: join ─────────────────────────────────────────────────
   async function handleJoinMatch(code: string) {
     if (!user) return;
     setJoinLoading(true);
     try {
-      const m = await joinMatch(code, user.id, profile?.display_name || 'Claude');
+      const m = await joinMatch(code, user.id, profile?.display_name || 'Guest');
       setMatch(m); setIsHost(false);
-      subscribeToMatch(m.id);
+      subscribeToMatch(m.id, user.id);
       setQuestions(Array.isArray(m.question_set) ? m.question_set : JSON.parse(m.question_set as any));
       const { data: players } = await sb.from('match_players').select('*').eq('match_id', m.id);
       setMatchPlayers((players as MatchPlayer[]) || []);
@@ -214,38 +250,60 @@ export default function App() {
   }
 
   // ── H2H: realtime ─────────────────────────────────────────────
-  function subscribeToMatch(matchId: string) {
+  function subscribeToMatch(matchId: string, uid: string) {
     if (channelRef.current) channelRef.current.unsubscribe();
     channelRef.current = sb.channel(`match-${matchId}`)
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'match_players', filter: `match_id=eq.${matchId}` },
         (payload: any) => {
-          const updated = payload.new as MatchPlayer;
+          const updated = payload.new as MatchPlayer & { completed?: boolean };
           setMatchPlayers(prev => {
             const next = prev.map(p => p.id === updated.id ? { ...p, ...updated } : p);
             return next.find(p => p.id === updated.id) ? next : [...prev, updated];
           });
-          if (updated.user_id !== user?.id) setOpponentScore(updated.score);
+          if (updated.user_id !== uid) {
+            setOpponentScore(updated.score);
+            if (updated.completed && myCompletedRef.current) {
+              finalizeMatch(matchId).then(winnerId => {
+                if (winnerId) {
+                  setMatchWinner(winnerId === uid ? 'you' : 'opponent');
+                  loadProfile(uid).then(p => p && setProfile(p));
+                  setScreen('results');
+                }
+              });
+            }
+          }
         })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'matches', filter: `id=eq.${matchId}` },
         (payload: any) => {
-          const m = payload.new as Match;
+          const m = payload.new as Match & { winner_id?: string };
           setMatch(prev => prev ? { ...prev, ...m } : prev);
           if (m.status === 'active') {
             setQIndex(0); setScore(0); setCorrect(0);
-            setFastestSecs(TIMER_TOTAL); setBestStreak(0); setCurStreak(0); setSpeedBonus(0);
+            setFastestSecs(9999); setBestStreak(0); setCurStreak(0); setSpeedBonus(0);
             setTimeout(() => setScreen('question'), 3200);
+          }
+          if (m.status === 'completed' && m.winner_id) {
+            setMatchWinner(m.winner_id === uid ? 'you' : 'opponent');
+            loadProfile(uid).then(p => p && setProfile(p));
+            setTimeout(() => setScreen('results'), 420);
           }
         })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'match_players', filter: `match_id=eq.${matchId}` },
-        (payload: any) => setMatchPlayers(prev => [...prev, payload.new as MatchPlayer]))
+        async (payload: any) => {
+          setMatchPlayers(prev => [...prev, payload.new as MatchPlayer]);
+          // Guest joining triggers personal question injection — re-fetch so host gets updated set
+          const { data } = await sb.from('matches').select('question_set').eq('id', matchId).single();
+          if (data) setQuestions((data as any).question_set || []);
+        })
       .subscribe();
   }
 
   async function handleStartMatch() {
     if (!match) return;
+    myCompletedRef.current = false;
     await startMatch(match.id);
     setQIndex(0); setScore(0); setCorrect(0);
-    setFastestSecs(TIMER_TOTAL); setBestStreak(0); setCurStreak(0); setSpeedBonus(0);
+    setFastestSecs(9999); setBestStreak(0); setCurStreak(0); setSpeedBonus(0);
     setTimeout(() => setScreen('question'), 3200);
   }
 
@@ -267,6 +325,8 @@ export default function App() {
     <SafeAreaProvider>
       <StatusBar style={isDark ? 'light' : 'dark'} />
       <View style={{ flex: 1, backgroundColor: isDark ? EC.tealDeep : EC.cream }}>
+
+        {screen === 'auth' && <AuthScreen onAuth={handleAuth} />}
 
         {screen === 'nameSetup' && <NameSetupScreen onSave={handleNameSave} />}
 
@@ -290,7 +350,7 @@ export default function App() {
                 {' '}head
               </Text>
               <Text style={{ fontFamily: F.serifItalic, fontSize: 15, color: EC.inkSoft, textAlign: 'center' }}>
-                {'Challenge a friend to ten questions\non the same question set.'}
+                {'Challenge a friend to questions\non the same question set.'}
               </Text>
             </View>
             <View style={{ paddingHorizontal: 24, paddingBottom: 36, gap: 10 }}>
@@ -324,36 +384,49 @@ export default function App() {
           </View>
         )}
 
-        {screen === 'category' && <CategoryScreen mode="solo" onBegin={startSolo} />}
-        {screen === 'category-h2h' && <CategoryScreen mode="h2h" onBegin={handleCreateMatch} />}
+        {screen === 'category' && <CategoryScreen mode="solo" onBegin={(d, c, cat) => startSolo(d, c, cat)} />}
+        {screen === 'category-h2h' && <CategoryScreen mode="h2h" onBegin={(d, c, cat) => handleCreateMatch(d, c, cat)} />}
 
         {screen === 'join' && (
           <JoinMatchScreen onJoin={handleJoinMatch} onBack={() => setScreen('challengeMenu')} loading={joinLoading} />
         )}
 
-        {screen === 'loading' && <LoadingScreen category={category} />}
+        {screen === 'loading' && <LoadingScreen />}
 
         {screen === 'question' && questions.length > 0 && (
           <QuestionScreen
             question={questions[qIndex]} qIndex={qIndex}
             totalQs={questions.length} score={score} difficulty={difficulty}
+            timerTotal={timerTotal}
             onAnswer={handleAnswer}
             onExit={() => { setMatch(null); setScreen('home'); }}
             opponentScore={match ? opponentScore : undefined}
           />
         )}
 
+        {screen === 'h2h-waiting' && (
+          <View style={{ flex: 1, backgroundColor: EC.cream, alignItems: 'center',
+            justifyContent: 'center', gap: 16, paddingHorizontal: 32 }}>
+            <Text style={{ fontFamily: F.serifItalic, fontSize: 22, color: EC.ink, textAlign: 'center' }}>
+              Waiting for your opponent to finish…
+            </Text>
+            <Text style={{ fontFamily: F.serifItalic, fontSize: 13, color: EC.inkSoft, textAlign: 'center' }}>
+              Results will appear when both players are done.
+            </Text>
+          </View>
+        )}
+
         {screen === 'results' && (
           <ResultsScreen
-            score={score} correct={correct}
-            fastestSecs={fastestSecs >= TIMER_TOTAL ? TIMER_TOTAL : fastestSecs}
+            score={score} correct={correct} totalQs={questions.length}
+            fastestSecs={fastestSecs}
             bestStreak={bestStreak} speedBonus={speedBonus}
-            prevBest={prevBest} categoryName={category?.name || 'General Knowledge'}
+            prevBest={prevBest}
             matchWinner={matchWinner}
             newBadges={newBadgesList} allBadges={allBadges}
             onReplay={() => {
               setMatch(null); setMatchWinner(null); setNewBadgesList([]);
-              if (category) startSolo(category, difficulty);
+              startSolo(difficulty, questions.length);
             }}
             onChallenge={() => {
               setMatch(null); setMatchWinner(null); setNewBadgesList([]);

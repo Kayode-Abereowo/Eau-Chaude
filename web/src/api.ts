@@ -109,6 +109,15 @@ async function fetchOpenTDBQuestions(opentdbId: number | null, difficulty: strin
 
 export async function buildSession(category: Category | null, difficulty: string, count = 10): Promise<Question[]> {
   const diff = DIFF_MAP[difficulty] || 'medium';
+
+  // Categories with no OpenTDB equivalent (e.g. Bible Trivia) → all internal
+  if (category && category.opentdb_id === null) {
+    const internal = await fetchInternalQuestions(category.id, diff, count);
+    let questions = internal.sort(() => Math.random() - 0.5);
+    if (questions.length < 5) questions = [...LOCAL_FALLBACK].sort(() => Math.random() - 0.5);
+    return questions.slice(0, count);
+  }
+
   const internalCount = Math.ceil(count * 0.6);
   const externalCount = count - internalCount;
   const [internal, external] = await Promise.all([
@@ -181,25 +190,39 @@ export async function createMatch(userId: string, displayName: string, category:
 
 export async function joinMatch(code: string, userId: string, displayName: string) {
   const { data: match, error } = await sb.from('matches')
-    .select('id,code,status,category_id,difficulty,question_set')
+    .select('id,code,host_id,status,category_id,difficulty,question_set')
     .eq('code', code.toUpperCase())
     .eq('status', 'waiting')
     .single();
   if (error || !match) throw new Error('Match not found or already started');
+  const m = match as any;
   const { error: insertError } = await sb.from('match_players').insert({
-    match_id: (match as any).id, user_id: userId, display_name: displayName,
+    match_id: m.id, user_id: userId, display_name: displayName,
   });
   if (insertError) throw new Error('Could not join match. You may already be in it.');
-  return match as any;
+
+  // Inject personal questions for this specific pair (up to 2, prepended)
+  await sb.rpc('inject_personal_questions', {
+    p_match_id: m.id,
+    p_user_a:   userId,
+    p_user_b:   m.host_id,
+  });
+
+  // Re-fetch so the guest gets the updated question_set (with personal Qs prepended)
+  const { data: updated } = await sb.from('matches')
+    .select('id,code,host_id,status,category_id,difficulty,question_set')
+    .eq('id', m.id).single();
+  return (updated || m) as any;
 }
 
 export async function startMatch(matchId: string) {
   await sb.from('matches').update({ status: 'active', started_at: new Date().toISOString() }).eq('id', matchId);
 }
 
-export async function claimMatchWinner(matchId: string, userId: string): Promise<boolean> {
-  const { data } = await sb.rpc('claim_match_winner', { p_match_id: matchId, p_user_id: userId });
-  return data === true;
+export async function finalizeMatch(matchId: string): Promise<string | null> {
+  const { data, error } = await sb.rpc('finalize_match', { p_match_id: matchId });
+  if (error) { console.error('finalizeMatch error:', error); return null; }
+  return (data as string) || null;
 }
 
 export async function updatePlayerScore(matchId: string, userId: string, score: number, qIndex: number, completed: boolean) {
