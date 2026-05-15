@@ -7,10 +7,11 @@ const BIBLE = CATEGORIES_LIST.find(c => c.id === 15)!;
 
 interface Props {
   onBegin: (difficulty: string, count: number, category: Category | null) => void;
+  onBack: () => void;
   mode?: 'solo' | 'h2h';
 }
 
-export function CategoryScreen({ onBegin, mode = 'solo' }: Props) {
+export function CategoryScreen({ onBegin, onBack, mode = 'solo' }: Props) {
   const [difficulty,    setDifficulty]    = useState('Medium');
   const [questionCount, setQuestionCount] = useState(10);
   const [category,      setCategory]      = useState<Category | null>(null);
@@ -97,7 +98,7 @@ export function CategoryScreen({ onBegin, mode = 'solo' }: Props) {
         </div>
       </div>
 
-      <div style={{ padding: '0 24px 36px' }}>
+      <div style={{ padding: '0 24px 36px', display: 'flex', flexDirection: 'column', gap: 10 }}>
         <button onClick={() => onBegin(difficulty, questionCount, category)} style={{
           width: '100%', height: 56,
           background: EC.teal, color: EC.cream, border: 'none', borderRadius: 6,
@@ -105,6 +106,12 @@ export function CategoryScreen({ onBegin, mode = 'solo' }: Props) {
           justifyContent: 'space-between', padding: '0 22px', cursor: 'pointer' }}>
           <span>{mode === 'h2h' ? 'Create match' : 'Begin'} · {questionCount} questions</span>
           <span style={{ fontSize: 20 }}>→</span>
+        </button>
+        <button onClick={onBack} style={{
+          width: '100%', height: 48, background: 'transparent',
+          color: EC.inkSoft, border: `1px solid ${EC.creamLine}`, borderRadius: 6,
+          fontFamily: ecSerif, fontSize: 16, cursor: 'pointer' }}>
+          ← Back
         </button>
       </div>
     </div>

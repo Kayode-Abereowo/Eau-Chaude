@@ -18,14 +18,18 @@ export function ProfileScreen({ userId, profile, allBadges, onBack }: Props) {
 
   useEffect(() => {
     (async () => {
-      const [{ data: ub }, { data: pb }, { data: h2h }] = await Promise.all([
+      const [{ data: ub }, { data: pb }, { data: h2hRows }] = await Promise.all([
         sb.from('user_badges').select('badge_id,earned_at').eq('user_id', userId),
         sb.from('personal_bests').select('category_id,score').eq('user_id', userId).order('score', { ascending: false }),
-        sb.from('h2h_records').select('wins,losses').eq('user_id', userId).single(),
+        sb.from('h2h_records').select('wins,losses').eq('user_id', userId),
       ]);
       setUserBadges((ub as any[]) || []);
       setCatBests((pb as any[]) || []);
-      setH2hRecord((h2h as any) || null);
+      const rows = (h2hRows as { wins: number; losses: number }[]) || [];
+      setH2hRecord(rows.length > 0
+        ? { wins: rows.reduce((s, r) => s + r.wins, 0), losses: rows.reduce((s, r) => s + r.losses, 0) }
+        : null
+      );
       setLoading(false);
     })();
   }, [userId]);

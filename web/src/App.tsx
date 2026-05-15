@@ -197,7 +197,7 @@ export default function App() {
       if (!match && userId) {
         try {
           const { newBadges } = await saveSession(
-            userId, 0, difficulty, newScore, newCorr, newBest, speedBonus + bonus, questions,
+            userId, category?.id ?? null, difficulty, newScore, newCorr, newBest, speedBonus + bonus, questions,
           );
           if (newScore > prevBest) {
             setPrevBest(newScore);
@@ -371,11 +371,11 @@ export default function App() {
           )}
 
           {screen === 'category' && (
-            <CategoryScreen onBegin={startSolo} mode="solo" />
+            <CategoryScreen onBegin={startSolo} onBack={() => setScreen('home')} mode="solo" />
           )}
 
           {screen === 'category-h2h' && (
-            <CategoryScreen onBegin={handleCreateMatch} mode="h2h" />
+            <CategoryScreen onBegin={handleCreateMatch} onBack={() => setScreen('challengeMenu')} mode="h2h" />
           )}
 
           {screen === 'loading' && (
@@ -418,7 +418,9 @@ export default function App() {
               prevBest={prevBest}
               onReplay={() => startSolo(difficulty, questions.length)}
               onChallenge={() => setScreen('challengeMenu')}
+              onHome={() => { setMatch(null); setMatchWinner(null); setNewBadgesList([]); setScreen('home'); }}
               matchWinner={matchWinner}
+              opponentScore={matchWinner ? matchPlayers.find(p => p.user_id !== userId)?.score : undefined}
               newBadges={newBadgesList}
               allBadges={allBadges}
             />

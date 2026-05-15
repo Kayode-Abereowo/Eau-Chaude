@@ -12,7 +12,9 @@ interface Props {
   prevBest: number;
   onReplay: () => void;
   onChallenge: () => void;
+  onHome: () => void;
   matchWinner?: 'you' | 'opponent' | null;
+  opponentScore?: number;
   newBadges: string[];
   allBadges: Badge[];
 }
@@ -71,7 +73,7 @@ function Confetti() {
 
 export function ResultsScreen({
   score, correct, totalQs, fastestSecs, bestStreak, speedBonus, prevBest,
-  onReplay, onChallenge, matchWinner, newBadges, allBadges,
+  onReplay, onChallenge, onHome, matchWinner, opponentScore, newBadges, allBadges,
 }: Props) {
   const isNewBest = score > prevBest;
   const isWinner  = matchWinner === 'you';
@@ -82,6 +84,7 @@ export function ResultsScreen({
     { label: 'Fastest',     mono: fastestSecs < 9999 ? `${fastestSecs.toFixed(1)} s` : '—' },
     { label: 'Best streak', mono: `${bestStreak} in a row` },
     { label: 'Speed bonus', mono: `+${speedBonus}` },
+    ...(opponentScore !== undefined ? [{ label: 'Opponent score', mono: opponentScore.toLocaleString() }] : []),
   ];
 
   const earnedBadgeDetails = newBadges
@@ -212,6 +215,12 @@ export function ResultsScreen({
           display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 22px',
           cursor: 'pointer' }}>
           <span>Challenge a friend</span><span style={{ fontSize: 19 }}>→</span>
+        </button>
+        <button onClick={onHome} style={{ width: '100%', height: 48, background: 'transparent',
+          color: isWinner ? EC.onTealSoft : EC.inkSoft,
+          border: `1px solid ${isWinner ? EC.tealLine : EC.creamLine}`,
+          borderRadius: 6, fontFamily: ecSerif, fontSize: 16, cursor: 'pointer' }}>
+          ← Home
         </button>
       </div>
     </div>

@@ -135,7 +135,7 @@ export async function buildSession(category: Category | null, difficulty: string
 
 export async function saveSession(
   userId: string,
-  categoryId: number,
+  categoryId: number | null,
   difficulty: string,
   score: number,
   correctCount: number,

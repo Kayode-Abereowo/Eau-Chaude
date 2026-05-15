@@ -13,10 +13,12 @@ interface Props {
   speedBonus: number;
   prevBest: number;
   matchWinner?: 'you' | 'opponent' | null;
+  opponentScore?: number;
   newBadges: string[];
   allBadges: Badge[];
   onReplay: () => void;
   onChallenge: () => void;
+  onHome: () => void;
 }
 
 const CONFETTI_COLORS = ['#0E6A78', '#FFD700', '#B65B5C', '#F4EEE6', '#4CAF50', '#FF6B35'];
@@ -61,7 +63,7 @@ const confettiPieces = Array.from({ length: 24 }, (_, i) => ({
 
 export function ResultsScreen({
   score, correct, totalQs, fastestSecs, bestStreak, speedBonus,
-  prevBest, matchWinner, newBadges, allBadges, onReplay, onChallenge,
+  prevBest, matchWinner, opponentScore, newBadges, allBadges, onReplay, onChallenge, onHome,
 }: Props) {
   const isNewBest = score > prevBest;
   const isWinner  = matchWinner === 'you';
@@ -93,6 +95,7 @@ export function ResultsScreen({
     { label: 'Fastest',     mono: fastestSecs < 9999 ? `${fastestSecs.toFixed(1)} s` : '—' },
     { label: 'Best streak', mono: `${bestStreak} in a row` },
     { label: 'Speed bonus', mono: `+${speedBonus}` },
+    ...(opponentScore !== undefined ? [{ label: 'Opponent score', mono: opponentScore.toLocaleString() }] : []),
   ];
 
   const earnedBadgeDetails = newBadges
@@ -242,6 +245,14 @@ export function ResultsScreen({
         })}>
           <Text style={{ fontFamily: F.serif, fontSize: 19, color: textClr }}>Challenge a friend</Text>
           <Text style={{ fontSize: 19, color: textClr }}>→</Text>
+        </Pressable>
+        <Pressable onPress={onHome} style={({ pressed }) => ({
+          width: '100%', height: 48,
+          backgroundColor: pressed ? 'rgba(26,35,38,0.04)' : 'transparent',
+          borderWidth: 1, borderColor: isWinner ? EC.tealLine : EC.creamLine,
+          borderRadius: 6, alignItems: 'center', justifyContent: 'center',
+        })}>
+          <Text style={{ fontFamily: F.serif, fontSize: 16, color: isWinner ? EC.onTealSoft : EC.inkSoft }}>← Home</Text>
         </Pressable>
       </View>
     </View>

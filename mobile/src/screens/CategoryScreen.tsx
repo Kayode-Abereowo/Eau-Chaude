@@ -9,9 +9,10 @@ const Q_COUNTS = [5, 10, 15, 20, 25];
 interface Props {
   mode?: 'solo' | 'h2h';
   onBegin: (difficulty: string, count: number, categoryId: number | null) => void;
+  onBack: () => void;
 }
 
-export function CategoryScreen({ mode = 'solo', onBegin }: Props) {
+export function CategoryScreen({ mode = 'solo', onBegin, onBack }: Props) {
   const [difficulty,  setDifficulty]  = useState('Medium');
   const [count,       setCount]       = useState(10);
   const [categoryId,  setCategoryId]  = useState<number | null>(null);
@@ -102,7 +103,7 @@ export function CategoryScreen({ mode = 'solo', onBegin }: Props) {
         </View>
       </View>
 
-      <View style={{ paddingHorizontal: 24, paddingBottom: insets.bottom + 16, paddingTop: 8 }}>
+      <View style={{ paddingHorizontal: 24, paddingBottom: insets.bottom + 16, paddingTop: 8, gap: 10 }}>
         <Pressable onPress={() => onBegin(difficulty, count, categoryId)} style={({ pressed }) => ({
           width: '100%', height: 56, backgroundColor: pressed ? EC.tealDeep : EC.teal,
           borderRadius: 6, flexDirection: 'row', alignItems: 'center',
@@ -112,6 +113,14 @@ export function CategoryScreen({ mode = 'solo', onBegin }: Props) {
             Begin · {count} questions
           </Text>
           <Text style={{ fontSize: 20, color: EC.cream }}>→</Text>
+        </Pressable>
+        <Pressable onPress={onBack} style={({ pressed }) => ({
+          width: '100%', height: 48,
+          backgroundColor: pressed ? 'rgba(26,35,38,0.04)' : 'transparent',
+          borderWidth: 1, borderColor: EC.creamLine,
+          borderRadius: 6, alignItems: 'center', justifyContent: 'center',
+        })}>
+          <Text style={{ fontFamily: F.serif, fontSize: 16, color: EC.inkSoft }}>← Back</Text>
         </Pressable>
       </View>
     </View>
