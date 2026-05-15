@@ -297,8 +297,15 @@ export default function App() {
         })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'matches', filter: `id=eq.${matchId}` },
         payload => {
-          const m = payload.new as (MatchState & { winner_id?: string });
+          const m = payload.new as (MatchState & { winner_id?: string; question_set?: unknown[] });
           setMatch(prev => prev ? { ...prev, ...m } : m);
+          if (m.status === 'waiting') {
+            // Guest joined and inject_personal_questions fired — re-fetch players and questions
+            sb.from('match_players').select('*').eq('match_id', matchId).then(({ data }) => {
+              if (data) setMatchPlayers(data as PlayerState[]);
+            });
+            if (m.question_set) setQuestions(m.question_set as Question[]);
+          }
           if (m.status === 'active') {
             setQIndex(0); setScore(0); setCorrect(0);
             setFastestSecs(TIMER_TOTAL); setBestStreak(0); setCurStreak(0); setSpeedBonus(0);
@@ -311,11 +318,12 @@ export default function App() {
           }
         })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'match_players', filter: `match_id=eq.${matchId}` },
-        async payload => {
-          setMatchPlayers(prev => [...prev, payload.new as PlayerState]);
-          // Guest joining triggers personal question injection — re-fetch so host gets updated set
-          const { data } = await sb.from('matches').select('question_set').eq('id', matchId).single();
-          if (data) setQuestions((data as any).question_set || []);
+        payload => {
+          // Fast-path update; reliable fallback is the matches UPDATE handler above
+          setMatchPlayers(prev => {
+            const incoming = payload.new as PlayerState;
+            return prev.find(p => p.id === incoming.id) ? prev : [...prev, incoming];
+          });
         })
       .subscribe();
   }
