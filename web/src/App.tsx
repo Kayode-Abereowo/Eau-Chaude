@@ -76,6 +76,12 @@ export default function App() {
   const pendingJoinCode = useRef<string | null>(null);
 
   // ── Boot ─────────────────────────────────────────────────────
+  // Persist current screen so refresh restores it
+  useEffect(() => {
+    const safe: Screen[] = ['home', 'leaderboard', 'profile'];
+    if (safe.includes(screen)) sessionStorage.setItem('ec_screen', screen);
+  }, [screen]);
+
   useEffect(() => {
     // Grab ?join=CODE from URL before auth
     const joinCode = new URLSearchParams(window.location.search).get('join');
@@ -84,8 +90,14 @@ export default function App() {
       window.history.replaceState({}, '', window.location.pathname);
     }
 
-    (async () => {
-      const session = await getSession();
+    // onAuthStateChange is more reliable than getSession() on refresh — it fires
+    // INITIAL_SESSION after Supabase has fully processed the stored token (incl. refresh).
+    const { data: { subscription } } = sb.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_OUT') {
+        setUserId(null); setProfile(null); setScreen('auth'); return;
+      }
+      if (event !== 'INITIAL_SESSION') return;
+
       if (!session) { setScreen('auth'); return; }
 
       const uid = session.user.id;
@@ -98,8 +110,7 @@ export default function App() {
       setPrevBest(p?.personal_best || 0);
 
       if (!p?.display_name || p.display_name === 'Player') {
-        setScreen('nameSetup');
-        return;
+        setScreen('nameSetup'); return;
       }
 
       if (pendingJoinCode.current) {
@@ -109,8 +120,12 @@ export default function App() {
         return;
       }
 
-      setScreen('home');
-    })();
+      // Restore whichever safe screen the user was on before refresh
+      const saved = sessionStorage.getItem('ec_screen') as Screen | null;
+      setScreen(saved && ['home', 'leaderboard', 'profile'].includes(saved) ? saved : 'home');
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
   // ── Auth callback ─────────────────────────────────────────────

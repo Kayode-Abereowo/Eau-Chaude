@@ -37,7 +37,7 @@ export function ProfileScreen({ userId, profile, allBadges, onBack }: Props) {
   const earnedIds = new Set(userBadges.map(b => b.badge_id));
 
   return (
-    <div style={{ width: '100%', height: '100%', background: EC.cream, display: 'flex', flexDirection: 'column' }}>
+    <div style={{ width: '100%', height: '100%', overflow: 'hidden', background: EC.cream, display: 'flex', flexDirection: 'column' }}>
       <ECPageHeader left="No. 007" right="Your record" />
       <div style={{ flex: 1, overflowY: 'auto', padding: '0 24px' }}>
         {/* Identity */}
