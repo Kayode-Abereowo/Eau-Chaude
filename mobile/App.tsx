@@ -392,8 +392,8 @@ export default function App() {
           </View>
         )}
 
-        {screen === 'category' && <CategoryScreen mode="solo" onBegin={(d, c, cat) => startSolo(d, c, cat)} />}
-        {screen === 'category-h2h' && <CategoryScreen mode="h2h" onBegin={(d, c, cat) => handleCreateMatch(d, c, cat)} />}
+        {screen === 'category' && <CategoryScreen mode="solo" onBegin={(d, c, cat) => startSolo(d, c, cat)} onBack={() => setScreen('home')} />}
+        {screen === 'category-h2h' && <CategoryScreen mode="h2h" onBegin={(d, c, cat) => handleCreateMatch(d, c, cat)} onBack={() => setScreen('challengeMenu')} />}
 
         {screen === 'join' && (
           <JoinMatchScreen onJoin={handleJoinMatch} onBack={() => setScreen('challengeMenu')} loading={joinLoading} />
@@ -431,6 +431,7 @@ export default function App() {
             bestStreak={bestStreak} speedBonus={speedBonus}
             prevBest={prevBest}
             matchWinner={matchWinner}
+            opponentScore={matchWinner ? matchPlayers.find(p => p.user_id !== user?.id)?.score : undefined}
             newBadges={newBadgesList} allBadges={allBadges}
             onReplay={() => {
               setMatch(null); setMatchWinner(null); setNewBadgesList([]);
@@ -439,6 +440,10 @@ export default function App() {
             onChallenge={() => {
               setMatch(null); setMatchWinner(null); setNewBadgesList([]);
               setScreen('challengeMenu');
+            }}
+            onHome={() => {
+              setMatch(null); setMatchWinner(null); setNewBadgesList([]);
+              setScreen('home');
             }}
           />
         )}
