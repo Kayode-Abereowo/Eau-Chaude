@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { EC, ecSerif, TIMER_TOTAL, LETTERS, type Question } from '../constants';
+import { EC, ecSerif, LETTERS, type Question } from '../constants';
 import { ECSmallCaps, ECMono, ECHair } from '../components/atoms';
 import { TimerArc } from '../components/TimerArc';
 import { AnswerTile } from '../components/AnswerTile';
@@ -10,13 +10,14 @@ interface Props {
   totalQs: number;
   score: number;
   difficulty: string;
+  timerTotal: number;
   onAnswer: (isCorrect: boolean, pts: number, timeAtAnswer: number) => void;
   onExit: () => void;
   opponentScore?: number;
 }
 
-export function QuestionScreen({ question, qIndex, totalQs, score, difficulty, onAnswer, onExit, opponentScore }: Props) {
-  const [timeLeft, setTimeLeft] = useState(TIMER_TOTAL);
+export function QuestionScreen({ question, qIndex, totalQs, score, difficulty, timerTotal, onAnswer, onExit, opponentScore }: Props) {
+  const [timeLeft, setTimeLeft] = useState(timerTotal);
   const [chosen,   setChosen]   = useState<number | null>(null);
   const [revealed, setRevealed] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -25,10 +26,10 @@ export function QuestionScreen({ question, qIndex, totalQs, score, difficulty, o
   const dark     = personal;
 
   useEffect(() => {
-    setTimeLeft(TIMER_TOTAL);
+    setTimeLeft(timerTotal);
     setChosen(null);
     setRevealed(false);
-  }, [question]);
+  }, [question, timerTotal]);
 
   useEffect(() => {
     if (revealed) return;
@@ -53,7 +54,7 @@ export function QuestionScreen({ question, qIndex, totalQs, score, difficulty, o
     setChosen(idx); setRevealed(true);
     const correct = idx === question.correct_index;
     const base    = difficulty === 'Hard' ? 300 : difficulty === 'Medium' ? 200 : 100;
-    const pts     = correct ? base + Math.round(base * (tl / TIMER_TOTAL) * 0.5) : 0;
+    const pts     = correct ? base + Math.round(base * (tl / timerTotal) * 0.5) : 0;
     setTimeout(() => onAnswer(correct, pts, tl), 950);
   }
 
@@ -77,7 +78,7 @@ export function QuestionScreen({ question, qIndex, totalQs, score, difficulty, o
               {personal ? 'A personal question' : difficulty}
             </ECSmallCaps>
           </div>
-          <TimerArc remaining={timeLeft} dark={dark} />
+          <TimerArc remaining={timeLeft} timerTotal={timerTotal} dark={dark} />
         </div>
         <div style={{ height: 1, background: dark ? EC.tealLine : EC.creamLine, marginTop: 14 }} />
       </div>
@@ -127,8 +128,8 @@ export function QuestionScreen({ question, qIndex, totalQs, score, difficulty, o
           {personal ? 'Personal · Sparingly served' : 'Progress'}
         </ECSmallCaps>
         {!personal && (
-          <div style={{ display: 'flex', gap: 5 }}>
-            {Array.from({ length: 10 }).map((_, i) => (
+          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', justifyContent: 'flex-end', maxWidth: 180 }}>
+            {Array.from({ length: totalQs }).map((_, i) => (
               <div key={i} style={{ width: 6, height: 6, borderRadius: 6,
                 background: i < qIndex ? EC.teal : EC.creamLine }} />
             ))}

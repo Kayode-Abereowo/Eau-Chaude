@@ -1,11 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
 import { sb } from './supabase';
 import {
-  TIMER_TOTAL, type Profile, type Badge, type Question,
+  TIMER_TOTAL, getQuestionTime, type Profile, type Badge, type Question,
 } from './constants';
 import {
   getSession, loadProfile, updateDisplayName, buildSession,
-  saveSession, createMatch, joinMatch, startMatch, updatePlayerScore,
+  saveSession, createMatch, joinMatch, startMatch, updatePlayerScore, claimMatchWinner,
 } from './api';
 import { IOSDevice }            from './components/IOSDevice';
 import { LoadingScreen }        from './screens/LoadingScreen';
@@ -46,6 +46,7 @@ export default function App() {
   // ── Solo session ─────────────────────────────────────────────
   const [category,    setCategory]    = useState<null>(null);
   const [difficulty,  setDifficulty]  = useState('Medium');
+  const [timerTotal,  setTimerTotal]  = useState(TIMER_TOTAL);
   const [questions,   setQuestions]   = useState<Question[]>([]);
   const [qIndex,      setQIndex]      = useState(0);
   const [score,       setScore]       = useState(0);
@@ -156,7 +157,7 @@ export default function App() {
 
   // ── Solo game ─────────────────────────────────────────────────
   async function startSolo(diff: string, count = 10) {
-    setCategory(null); setDifficulty(diff);
+    setCategory(null); setDifficulty(diff); setTimerTotal(getQuestionTime(diff, count));
     setScreen('loading');
     const qs = await buildSession(null, diff, count);
     setQuestions(qs); setQIndex(0);
@@ -199,9 +200,8 @@ export default function App() {
         } catch (e) { console.error('saveSession failed:', e); }
       }
       if (match && userId) {
-        sb.rpc('complete_match', { p_match_id: match.id });
-        const opp = matchPlayers.find(p => p.user_id !== userId);
-        setMatchWinner(opp && newScore > opp.score ? 'you' : 'opponent');
+        const won = await claimMatchWinner(match.id, userId);
+        setMatchWinner(won ? 'you' : 'opponent');
       }
       setTimeout(() => setScreen('results'), 420);
     } else {
@@ -212,13 +212,13 @@ export default function App() {
   // ── H2H: create ───────────────────────────────────────────────
   async function handleCreateMatch(diff: string, count = 10) {
     if (!userId || !profile) return;
-    setCategory(null); setDifficulty(diff);
+    setCategory(null); setDifficulty(diff); setTimerTotal(getQuestionTime(diff, count));
     setScreen('loading');
     try {
       const m = await createMatch(userId, profile.display_name, null, diff, count);
       setMatch({ ...m, status: 'waiting', category_id: 0, difficulty: DIFF_MAP_REVERSE[diff] || diff });
       setIsHost(true);
-      subscribeToMatch(m.id);
+      subscribeToMatch(m.id, userId);
       const { data: qs } = await sb.from('matches').select('question_set').eq('id', m.id).single();
       setQuestions((qs as any)?.question_set || []);
       const { data: players } = await sb.from('match_players').select('*').eq('match_id', m.id);
@@ -235,8 +235,12 @@ export default function App() {
     try {
       const m = await joinMatch(code, uid, p?.display_name || 'Guest');
       setMatch(m); setIsHost(false);
-      subscribeToMatch(m.id);
-      setQuestions(Array.isArray(m.question_set) ? m.question_set : JSON.parse(m.question_set));
+      const qsArray = Array.isArray(m.question_set) ? m.question_set : JSON.parse(m.question_set);
+      const diffDisplay: Record<string, string> = { easy: 'Gentle', medium: 'Medium', hard: 'Hard' };
+      setDifficulty(diffDisplay[m.difficulty] || 'Medium');
+      setTimerTotal(getQuestionTime(diffDisplay[m.difficulty] || 'Medium', qsArray.length));
+      subscribeToMatch(m.id, uid);
+      setQuestions(qsArray);
       const { data: players } = await sb.from('match_players').select('*').eq('match_id', m.id);
       setMatchPlayers((players as PlayerState[]) || []);
       setScreen('lobby');
@@ -252,7 +256,7 @@ export default function App() {
   }
 
   // ── H2H: realtime ─────────────────────────────────────────────
-  function subscribeToMatch(matchId: string) {
+  function subscribeToMatch(matchId: string, uid: string) {
     if (channelRef.current) channelRef.current.unsubscribe();
     channelRef.current = sb.channel(`match-${matchId}`)
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'match_players', filter: `match_id=eq.${matchId}` },
@@ -262,16 +266,21 @@ export default function App() {
             const next = prev.map(p => p.id === updated.id ? { ...p, ...updated } : p);
             return next.find(p => p.id === updated.id) ? next : [...prev, updated];
           });
-          if (updated.user_id !== userId) setOpponentScore(updated.score);
+          if (updated.user_id !== uid) setOpponentScore(updated.score);
         })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'matches', filter: `id=eq.${matchId}` },
         payload => {
-          const m = payload.new as MatchState;
+          const m = payload.new as (MatchState & { winner_id?: string });
           setMatch(prev => prev ? { ...prev, ...m } : m);
           if (m.status === 'active') {
             setQIndex(0); setScore(0); setCorrect(0);
             setFastestSecs(TIMER_TOTAL); setBestStreak(0); setCurStreak(0); setSpeedBonus(0);
             setTimeout(() => setScreen('question'), 3200);
+          }
+          // Opponent finished first — pull current player to results
+          if (m.status === 'complete' && m.winner_id && m.winner_id !== uid) {
+            setMatchWinner('opponent');
+            setTimeout(() => setScreen('results'), 600);
           }
         })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'match_players', filter: `match_id=eq.${matchId}` },
@@ -339,6 +348,7 @@ export default function App() {
               totalQs={questions.length}
               score={score}
               difficulty={difficulty}
+              timerTotal={timerTotal}
               onAnswer={handleAnswer}
               onExit={() => setScreen('home')}
               opponentScore={match ? opponentScore_ : undefined}
@@ -348,10 +358,10 @@ export default function App() {
           {screen === 'results' && (
             <ResultsScreen
               score={score} correct={correct}
+              totalQs={questions.length}
               fastestSecs={fastestSecs === TIMER_TOTAL ? TIMER_TOTAL : fastestSecs}
               bestStreak={bestStreak} speedBonus={speedBonus}
               prevBest={prevBest}
-              categoryId={0}
               onReplay={() => startSolo(difficulty, questions.length)}
               onChallenge={() => setScreen('challengeMenu')}
               matchWinner={matchWinner}

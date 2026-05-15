@@ -19,6 +19,12 @@ export const ecSerif = '"Cormorant Garamond","EB Garamond",Georgia,serif';
 export const ecMono  = '"DM Mono","JetBrains Mono",ui-monospace,monospace';
 
 export const TIMER_TOTAL = 15;
+
+export function getQuestionTime(difficulty: string, count: number): number {
+  const base = difficulty === 'Hard' ? 10 : difficulty === 'Medium' ? 15 : 20;
+  const adj  = Math.round(-(count - 10) / 5);
+  return Math.max(6, base + adj);
+}
 export const LETTERS = ['A', 'B', 'C', 'D'] as const;
 export const DIFF_MAP: Record<string, string> = { Gentle: 'easy', Medium: 'medium', Hard: 'hard' };
 

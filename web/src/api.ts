@@ -1,5 +1,5 @@
 import { sb } from './supabase';
-import { DIFF_MAP, CATEGORIES_LIST, type Category, type Profile, type Question } from './constants';
+import { DIFF_MAP, type Category, type Profile, type Question } from './constants';
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
 
@@ -197,12 +197,14 @@ export async function startMatch(matchId: string) {
   await sb.from('matches').update({ status: 'active', started_at: new Date().toISOString() }).eq('id', matchId);
 }
 
+export async function claimMatchWinner(matchId: string, userId: string): Promise<boolean> {
+  const { data } = await sb.rpc('claim_match_winner', { p_match_id: matchId, p_user_id: userId });
+  return data === true;
+}
+
 export async function updatePlayerScore(matchId: string, userId: string, score: number, qIndex: number, completed: boolean) {
   await sb.from('match_players').update({
     score, current_q_index: qIndex, completed,
   }).eq('match_id', matchId).eq('user_id', userId);
 }
 
-export function getCategoryById(id: number): Category | undefined {
-  return CATEGORIES_LIST.find(c => c.id === id);
-}
