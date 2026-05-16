@@ -41,22 +41,38 @@ type TMPhase =
 
 // ── Reactions ─────────────────────────────────────────────────────────────────
 const HIGH_REACTIONS = [
-  { text: 'This is Obsession',                                    emojis: '😵‍💫🫶🔍' },
-  { text: 'You love me too much',                                  emojis: '💀❤️‍🔥😭' },
-  { text: 'You are knowing too much about me',                     emojis: '👁️👁️🫣😳' },
-  { text: 'Na see finish dey cause these things',                  emojis: '💀😂🫵' },
-  { text: 'Iho ho lo fa',                                          emojis: '🎶😍🪄✨' },
-  { text: 'At this point just move in',                            emojis: '🤯🏠❤️' },
+  { text: 'This is Obsession',                                      emojis: '😵‍💫🫶🔍' },
+  { text: 'You love me too much',                                    emojis: '💀❤️‍🔥😭' },
+  { text: 'You are knowing too much about me',                       emojis: '👁️👁️🫣😳' },
+  { text: 'Na see finish dey cause these things',                    emojis: '💀😂🫵' },
+  { text: 'Iho ho lo fa',                                            emojis: '🎶😍🪄✨' },
+  { text: 'At this point just move in',                              emojis: '🤯🏠❤️' },
   { text: 'Who are you and what have you done with a normal person', emojis: '🕵️🔎😂' },
+  { text: "You've been studying me like an exam",                    emojis: '📚😳🫵' },
+  { text: "I didn't even know I told you that",                      emojis: '😳🤫💀' },
+  { text: 'This feels illegal. I\'m reporting you.',                 emojis: '🚨😂❤️' },
+  { text: 'E be like say you get CCTV for my life',                  emojis: '📹👁️😂' },
+  { text: 'You sabi me pass my mama',                                emojis: '👩‍👧💀😭' },
+  { text: 'O mo mi gan gan',                                         emojis: '🫶✨😭' },
+  { text: 'Bawo ni o se mo?',                                        emojis: '🤔✨🫶' },
+  { text: 'You know me better than I know myself',                   emojis: '🫠😍🤯' },
 ];
 const LOW_REACTIONS = [
-  { text: 'Wow. Just wow.',                emojis: '😤🙄💔' },
-  { text: 'This is how you pay me back',   emojis: '🫠😩💸' },
-  { text: 'After all these years',         emojis: '😔⏳💔' },
-  { text: 'I really thought you loved me', emojis: '😞🥀🚶' },
-  { text: 'Iwo at tani?',                  emojis: '🤨🫵😒' },
-  { text: 'We need to talk',               emojis: '💔🛋️😬' },
-  { text: 'Stranger. Actual stranger.',    emojis: '😐👤🚪' },
+  { text: 'Wow. Just wow.',                                          emojis: '😤🙄💔' },
+  { text: 'This is how you pay me back',                             emojis: '🫠😩💸' },
+  { text: 'After all these years',                                   emojis: '😔⏳💔' },
+  { text: 'I really thought you loved me',                           emojis: '😞🥀🚶' },
+  { text: 'Iwo at tani?',                                            emojis: '🤨🫵😒' },
+  { text: 'We need to talk',                                         emojis: '💔🛋️😬' },
+  { text: 'Stranger. Actual stranger.',                               emojis: '😐👤🚪' },
+  { text: 'Did we even meet?',                                        emojis: '🤔😶👤' },
+  { text: "I'm choosing to believe you just had a bad day",           emojis: '😮‍💨🙄☕' },
+  { text: "You've been Googling the wrong person",                    emojis: '🔍😐💀' },
+  { text: 'You just dey pretend say you know me',                    emojis: '🎭😒💔' },
+  { text: 'Omo this one pain sha',                                   emojis: '😩💀🫀' },
+  { text: 'Mo ro pe o mo mi',                                        emojis: '😔🥀💔' },
+  { text: 'E dabi pe a ko ti pade rara',                             emojis: '😶🚪💔' },
+  { text: 'We clearly need to spend more quality time together',     emojis: '🕰️😤💭' },
 ];
 
 function pickReaction(pct: number, seed: number) {
@@ -379,8 +395,8 @@ export function ToiMoiScreen({ userId, displayName, joinSessionId, onHome, onPro
     const pp = Math.round((thCorr / total) * 100);
     setMyPct(mp);
     setPartnerPct(pp);
-    setMySeed(myCorr);
-    setPartnerSeed(thCorr);
+    setMySeed(Math.floor(Math.random() * HIGH_REACTIONS.length));
+    setPartnerSeed(Math.floor(Math.random() * HIGH_REACTIONS.length));
 
     // Fetch question texts for wrong answers (missed questions review)
     const wrongIds = mine.filter(a => a.is_correct === false).map(a => a.question_id);
