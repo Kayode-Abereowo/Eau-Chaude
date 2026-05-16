@@ -200,8 +200,9 @@ export function ToiMoiScreen({ userId, displayName, joinSessionId, onHome }: Pro
   const [mySeed,         setMySeed]        = useState(0);
   const [partnerSeed,    setPartnerSeed]   = useState(0);
 
-  const channelRef  = useRef<ReturnType<typeof sb.channel> | null>(null);
-  const sessionRef  = useRef<TmSession | null>(null);
+  const channelRef           = useRef<ReturnType<typeof sb.channel> | null>(null);
+  const sessionRef           = useRef<TmSession | null>(null);
+  const partnerAnswersDoneRef = useRef(false); // true once the other player finishes answering
 
   // keep sessionRef in sync
   useEffect(() => { sessionRef.current = session; }, [session]);
@@ -250,7 +251,16 @@ export function ToiMoiScreen({ userId, displayName, joinSessionId, onHome }: Pro
     });
     ch.on('broadcast', { event: 'answers_complete' }, ({ payload }: any) => {
       if (payload.player_id !== userId) {
-        setPhase(prev => prev === 'waiting_answer' ? 'marking' : 'waiting_mark');
+        partnerAnswersDoneRef.current = true;
+        setPhase(prev => {
+          if (prev === 'waiting_answer') {
+            // I'm already done too → both done → load items and go to marking
+            loadAnswersToMark(sessionRef.current!);
+            return 'marking';
+          }
+          // I'm still answering — don't interrupt; handleSubmitAnswer will check the ref
+          return prev;
+        });
       }
     });
     ch.on('broadcast', { event: 'marking_complete' }, ({ payload }: any) => {
@@ -376,6 +386,7 @@ export function ToiMoiScreen({ userId, displayName, joinSessionId, onHome }: Pro
     setOpponentQs([]); setAnswerIdx(0); setDraftAns('');
     setMarkItems([]); setMarkIdx(0);
     setMyPct(0); setPartnerPct(0); setRevealStep(0);
+    partnerAnswersDoneRef.current = false;
   }
 
   // ── Phase handlers ────────────────────────────────────────────────────────
@@ -443,7 +454,13 @@ export function ToiMoiScreen({ userId, displayName, joinSessionId, onHome }: Pro
       setAnswerIdx(i => i + 1); setDraftAns(''); setShowHint(false); setAnswerError('');
     } else {
       broadcast('answers_complete', { player_id: userId });
-      setPhase('waiting_answer');
+      if (partnerAnswersDoneRef.current) {
+        // Partner already finished → both done → go straight to marking
+        await loadAnswersToMark(sessionRef.current ?? session!);
+        setPhase('marking');
+      } else {
+        setPhase('waiting_answer');
+      }
     }
   }
 
@@ -793,11 +810,7 @@ export function ToiMoiScreen({ userId, displayName, joinSessionId, onHome }: Pro
         <TmHeader left={`Marking ${markIdx + 1} of ${markItems.length}`} right="Be honest" />
         <div style={{ flex: 1, overflowY: 'auto', padding: '24px 28px 0', animation: 'tm-fade-up 0.35s ease both' }}>
           <div style={{ fontFamily: ecSerif, fontSize: 10, letterSpacing: '0.22em', textTransform: 'uppercase', color: TM.inkFaint, marginBottom: 10 }}>Your question</div>
-          <div style={{ fontFamily: ecSerif, fontSize: 19, color: TM.ink, lineHeight: 1.5, marginBottom: 20 }}>{item.question.question_text}</div>
-          <div style={{ fontFamily: ecSerif, fontSize: 10, letterSpacing: '0.22em', textTransform: 'uppercase', color: TM.inkFaint, marginBottom: 10 }}>Correct answer</div>
-          <div style={{ padding: '12px 16px', background: '#eef9f0', border: '1px solid rgba(52,168,83,0.25)', borderRadius: 6, fontFamily: ecSerif, fontSize: 16, color: '#276234', marginBottom: 20 }}>
-            {item.question.correct_answer}
-          </div>
+          <div style={{ fontFamily: ecSerif, fontSize: 19, color: TM.ink, lineHeight: 1.5, marginBottom: 28 }}>{item.question.question_text}</div>
           <div style={{ fontFamily: ecSerif, fontSize: 10, letterSpacing: '0.22em', textTransform: 'uppercase', color: TM.inkFaint, marginBottom: 10 }}>
             {partnerName}'s answer
           </div>

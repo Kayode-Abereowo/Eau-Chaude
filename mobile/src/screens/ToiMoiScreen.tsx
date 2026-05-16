@@ -191,8 +191,9 @@ export function ToiMoiScreen({ userId, displayName, joinSessionId, onHome }: Pro
   const [mySeed,            setMySeed]          = useState(0);
   const [partnerSeed,       setPartnerSeed]     = useState(0);
 
-  const channelRef = useRef<any>(null);
-  const sessionRef = useRef<TmSession | null>(null);
+  const channelRef            = useRef<any>(null);
+  const sessionRef            = useRef<TmSession | null>(null);
+  const partnerAnswersDoneRef = useRef(false);
   useEffect(() => { sessionRef.current = session; }, [session]);
 
   // ── Guest join ────────────────────────────────────────────────────────────
@@ -235,9 +236,14 @@ export function ToiMoiScreen({ userId, displayName, joinSessionId, onHome }: Pro
     });
     ch.on('broadcast', { event: 'answers_complete' }, ({ payload }: any) => {
       if (payload.player_id !== userId) {
+        partnerAnswersDoneRef.current = true;
         setPhase(prev => {
-          if (prev === 'answering')     { loadAnswersToMark(sessionRef.current!); return 'marking'; }
-          if (prev === 'waiting_answer') return 'marking';
+          if (prev === 'waiting_answer') {
+            // I'm already done → both done → load and go to marking
+            loadAnswersToMark(sessionRef.current!);
+            return 'marking';
+          }
+          // I'm still answering — don't interrupt; handleSubmitAnswer will check the ref
           return prev;
         });
       }
@@ -356,6 +362,7 @@ export function ToiMoiScreen({ userId, displayName, joinSessionId, onHome }: Pro
     setOpponentQs([]); setAnswerIdx(0); setDraftAns('');
     setMarkItems([]); setMarkIdx(0);
     setMyPct(0); setPartnerPct(0); setRevealStep(0);
+    partnerAnswersDoneRef.current = false;
   }
 
   // ── Phase handlers ────────────────────────────────────────────────────────
@@ -423,7 +430,13 @@ export function ToiMoiScreen({ userId, displayName, joinSessionId, onHome }: Pro
       setAnswerIdx(i => i + 1); setDraftAns(''); setShowHint(false);
     } else {
       broadcast('answers_complete', { player_id: userId });
-      setPhase('waiting_answer');
+      if (partnerAnswersDoneRef.current) {
+        // Partner already finished → both done → go straight to marking
+        await loadAnswersToMark(sessionRef.current ?? session!);
+        setPhase('marking');
+      } else {
+        setPhase('waiting_answer');
+      }
     }
   }
 
@@ -740,12 +753,7 @@ export function ToiMoiScreen({ userId, displayName, joinSessionId, onHome }: Pro
         <TmHeader left={`Marking ${markIdx + 1} of ${markItems.length}`} right="Be honest" />
         <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 28 }}>
           <Text style={{ fontFamily: F.serifMedium, fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', color: TM.inkFaint, marginBottom: 8 }}>Your question</Text>
-          <Text style={{ fontFamily: F.serif, fontSize: 19, color: TM.ink, lineHeight: 28, marginBottom: 20 }}>{item.question.question_text}</Text>
-
-          <Text style={{ fontFamily: F.serifMedium, fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', color: TM.inkFaint, marginBottom: 8 }}>Correct answer</Text>
-          <View style={{ padding: 14, backgroundColor: '#EEF9F0', borderWidth: 1, borderColor: 'rgba(52,168,83,0.25)', borderRadius: 6, marginBottom: 20 }}>
-            <Text style={{ fontFamily: F.serif, fontSize: 16, color: '#276234' }}>{item.question.correct_answer}</Text>
-          </View>
+          <Text style={{ fontFamily: F.serif, fontSize: 19, color: TM.ink, lineHeight: 28, marginBottom: 28 }}>{item.question.question_text}</Text>
 
           <Text style={{ fontFamily: F.serifMedium, fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', color: TM.inkFaint, marginBottom: 8 }}>{partnerName}'s answer</Text>
           <View style={{ padding: 14, backgroundColor: TM.roseSoft, borderWidth: 1, borderColor: TM.roseLine, borderRadius: 6, marginBottom: 28 }}>
