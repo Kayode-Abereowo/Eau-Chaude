@@ -5,13 +5,14 @@ interface Props {
   profile: Profile | null;
   onSolo: () => void;
   onChallenge: () => void;
+  onToiMoi: () => void;
   onLeaderboard: () => void;
   onProfile: () => void;
   monogramTaps: number;
   onMonogramTap: () => void;
 }
 
-export function HomeScreen({ profile, onSolo, onChallenge, onLeaderboard, onProfile, onMonogramTap }: Props) {
+export function HomeScreen({ profile, onSolo, onChallenge, onToiMoi, onLeaderboard, onProfile, onMonogramTap }: Props) {
   return (
     <div style={{ width: '100%', height: '100%', background: EC.cream, display: 'flex', flexDirection: 'column' }}>
       <ECPageHeader left="No. 001" right="Chapter — Welcome" />
@@ -48,10 +49,17 @@ export function HomeScreen({ profile, onSolo, onChallenge, onLeaderboard, onProf
         </button>
         <button onClick={onChallenge} style={{ width: '100%', height: 60, background: 'transparent',
           color: EC.ink, border: `1px solid ${EC.ink}`, borderRadius: 6, fontFamily: ecSerif, fontSize: 21,
-          letterSpacing: '0.02em',
+          letterSpacing: '0.02em', marginBottom: 12,
           display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 22px' }}>
           <span>Invite a friend</span>
           <ECSmallCaps color={EC.inkSoft} size={10}>II</ECSmallCaps>
+        </button>
+        <button onClick={onToiMoi} style={{ width: '100%', height: 60, background: '#B65B5C',
+          color: '#FBF5EF', border: 'none', borderRadius: 6, fontFamily: ecSerif, fontSize: 21,
+          letterSpacing: '0.02em',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 22px' }}>
+          <span>Toi <em style={{ fontStyle: 'italic' }}>&amp;</em> Moi</span>
+          <ECSmallCaps color="rgba(251,245,239,0.55)" size={10}>III</ECSmallCaps>
         </button>
 
         {/* Stats strip */}

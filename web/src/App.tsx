@@ -21,12 +21,13 @@ import { JoinMatchScreen }      from './screens/JoinMatchScreen';
 import { LeaderboardScreen }    from './screens/LeaderboardScreen';
 import { ProfileScreen }        from './screens/ProfileScreen';
 import { AdminScreen }          from './screens/AdminScreen';
+import { ToiMoiScreen }        from './screens/ToiMoiScreen';
 
 type Screen =
   | 'boot' | 'auth' | 'nameSetup' | 'home'
   | 'category' | 'category-h2h' | 'loading' | 'question' | 'results' | 'h2h-waiting'
   | 'challengeMenu' | 'join' | 'lobby'
-  | 'leaderboard' | 'profile' | 'admin';
+  | 'leaderboard' | 'profile' | 'admin' | 'toiMoi';
 
 interface MatchState {
   id: string; code: string; status: string;
@@ -75,6 +76,10 @@ export default function App() {
   // ── Pending join code (from URL before auth) ─────────────────
   const pendingJoinCode = useRef<string | null>(null);
 
+  // ── Pending Toi & Moi session id (from ?toi= URL param) ──────
+  const pendingToiId = useRef<string | null>(null);
+  const [tmJoinId, setTmJoinId] = useState<string | undefined>(undefined);
+
   // ── Boot ─────────────────────────────────────────────────────
   // Persist current screen so refresh restores it
   useEffect(() => {
@@ -83,10 +88,13 @@ export default function App() {
   }, [screen]);
 
   useEffect(() => {
-    // Grab ?join=CODE from URL before auth
-    const joinCode = new URLSearchParams(window.location.search).get('join');
-    if (joinCode) {
-      pendingJoinCode.current = joinCode;
+    // Grab ?join=CODE or ?toi=SESSION_ID from URL before auth
+    const params = new URLSearchParams(window.location.search);
+    const joinCode = params.get('join');
+    const toiId   = params.get('toi');
+    if (joinCode || toiId) {
+      if (joinCode) pendingJoinCode.current = joinCode;
+      if (toiId)   pendingToiId.current   = toiId;
       window.history.replaceState({}, '', window.location.pathname);
     }
 
@@ -120,6 +128,14 @@ export default function App() {
         return;
       }
 
+      if (pendingToiId.current) {
+        const sid = pendingToiId.current;
+        pendingToiId.current = null;
+        setTmJoinId(sid);
+        setScreen('toiMoi');
+        return;
+      }
+
       // Restore whichever safe screen the user was on before refresh
       const saved = sessionStorage.getItem('ec_screen') as Screen | null;
       setScreen(saved && ['home', 'leaderboard', 'profile'].includes(saved) ? saved : 'home');
@@ -149,6 +165,13 @@ export default function App() {
       const code = pendingJoinCode.current;
       pendingJoinCode.current = null;
       await doJoinMatch(code, uid, p);
+      return;
+    }
+    if (pendingToiId.current) {
+      const sid = pendingToiId.current;
+      pendingToiId.current = null;
+      setTmJoinId(sid);
+      setScreen('toiMoi');
       return;
     }
     setScreen('home');
@@ -380,6 +403,7 @@ export default function App() {
           {screen === 'home' && (
             <HomeScreen profile={profile} onSolo={() => setScreen('category')}
               onChallenge={() => setScreen('challengeMenu')}
+              onToiMoi={() => { setTmJoinId(undefined); setScreen('toiMoi'); }}
               onLeaderboard={() => setScreen('leaderboard')}
               onProfile={() => setScreen('profile')}
               monogramTaps={monogramTaps} onMonogramTap={handleMonogramTap} />
@@ -476,6 +500,15 @@ export default function App() {
 
           {screen === 'admin' && userId && (
             <AdminScreen userId={userId} onBack={() => setScreen('home')} />
+          )}
+
+          {screen === 'toiMoi' && userId && profile && (
+            <ToiMoiScreen
+              userId={userId}
+              displayName={profile.display_name || 'Player'}
+              joinSessionId={tmJoinId}
+              onHome={() => { setTmJoinId(undefined); setScreen('home'); }}
+            />
           )}
         </IOSDevice>
       </div>

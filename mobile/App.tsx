@@ -36,11 +36,12 @@ import { LobbyScreen }       from './src/screens/LobbyScreen';
 import { LeaderboardScreen } from './src/screens/LeaderboardScreen';
 import { ProfileScreen }     from './src/screens/ProfileScreen';
 import { AdminScreen }       from './src/screens/AdminScreen';
+import { ToiMoiScreen }     from './src/screens/ToiMoiScreen';
 
 type Screen =
   | 'auth' | 'nameSetup' | 'home' | 'category' | 'category-h2h' | 'challengeMenu'
   | 'join' | 'loading' | 'question' | 'results' | 'h2h-waiting' | 'lobby'
-  | 'leaderboard' | 'profile' | 'admin';
+  | 'leaderboard' | 'profile' | 'admin' | 'toiMoi';
 
 export default function App() {
   const [fontsLoaded] = useFonts({
@@ -343,6 +344,7 @@ export default function App() {
             profile={profile}
             onSolo={() => setScreen('category')}
             onChallenge={() => setScreen('challengeMenu')}
+            onToiMoi={() => setScreen('toiMoi')}
             onLeaderboard={() => setScreen('leaderboard')}
             onProfile={() => setScreen('profile')}
             onMonogramTap={handleMonogramTap}
@@ -467,6 +469,14 @@ export default function App() {
 
         {screen === 'admin' && (
           <AdminScreen userId={user?.id} onBack={() => setScreen('home')} />
+        )}
+
+        {screen === 'toiMoi' && user && profile && (
+          <ToiMoiScreen
+            userId={user.id}
+            displayName={profile.display_name || 'Player'}
+            onHome={() => setScreen('home')}
+          />
         )}
 
       </View>

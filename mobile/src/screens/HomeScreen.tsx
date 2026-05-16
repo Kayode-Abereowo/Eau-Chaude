@@ -8,12 +8,13 @@ interface Props {
   profile: Profile | null;
   onSolo: () => void;
   onChallenge: () => void;
+  onToiMoi: () => void;
   onLeaderboard: () => void;
   onProfile: () => void;
   onMonogramTap: () => void;
 }
 
-export function HomeScreen({ profile, onSolo, onChallenge, onLeaderboard, onProfile, onMonogramTap }: Props) {
+export function HomeScreen({ profile, onSolo, onChallenge, onToiMoi, onLeaderboard, onProfile, onMonogramTap }: Props) {
   const insets = useSafeAreaInsets();
 
   return (
@@ -52,11 +53,22 @@ export function HomeScreen({ profile, onSolo, onChallenge, onLeaderboard, onProf
 
         <Pressable onPress={onChallenge} style={({ pressed }) => ({
           width: '100%', height: 60, backgroundColor: pressed ? 'rgba(26,35,38,0.04)' : 'transparent',
-          borderWidth: 1, borderColor: EC.ink, borderRadius: 6,
+          borderWidth: 1, borderColor: EC.ink, borderRadius: 6, marginBottom: 12,
           flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 22,
         })}>
           <Text style={{ fontFamily: F.serif, fontSize: 21, color: EC.ink, letterSpacing: 0.4 }}>Invite a friend</Text>
           <ECSmallCaps color={EC.inkSoft} size={10}>II</ECSmallCaps>
+        </Pressable>
+
+        <Pressable onPress={onToiMoi} style={({ pressed }) => ({
+          width: '100%', height: 60, backgroundColor: pressed ? '#8B3A3B' : '#B65B5C',
+          borderRadius: 6, flexDirection: 'row', alignItems: 'center',
+          justifyContent: 'space-between', paddingHorizontal: 22,
+        })}>
+          <Text style={{ fontFamily: F.serif, fontSize: 21, color: '#FBF5EF', letterSpacing: 0.4 }}>
+            Toi <Text style={{ fontStyle: 'italic' }}>&amp;</Text> Moi
+          </Text>
+          <ECSmallCaps color="rgba(251,245,239,0.55)" size={10}>III</ECSmallCaps>
         </Pressable>
 
         {/* Stats strip */}
