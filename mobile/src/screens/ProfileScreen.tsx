@@ -100,58 +100,7 @@ export function ProfileScreen({ userId, profile, allBadges, onBack }: Props) {
           ))}
         </View>
 
-        {/* Badges */}
-        <View style={{ paddingHorizontal: 24, marginBottom: 20 }}>
-          <ECSmallCaps color={EC.inkFaint} size={9}>Badges ({earnedIds.size} / {allBadges.length})</ECSmallCaps>
-          {loading ? <Spinner /> : (
-            <View style={{ marginTop: 10, borderWidth: 1, borderColor: EC.creamLine, borderRadius: 6, overflow: 'hidden' }}>
-              {allBadges.map((b, i) => {
-                const earned = earnedIds.has(b.id);
-                return (
-                  <View key={b.id} style={{
-                    flexDirection: 'row', alignItems: 'center', gap: 12,
-                    padding: 11, paddingHorizontal: 16, opacity: earned ? 1 : 0.38,
-                    borderTopWidth: i > 0 ? 1 : 0, borderTopColor: EC.creamLine,
-                  }}>
-                    <Text style={{ fontFamily: F.serif, fontSize: 16, color: earned ? EC.teal : EC.inkFaint, width: 28 }}>
-                      {b.icon}
-                    </Text>
-                    <View style={{ flex: 1 }}>
-                      <Text style={{ fontFamily: F.serif, fontSize: 14, color: EC.ink }}>{b.name}</Text>
-                      <Text style={{ fontFamily: F.serifItalic, fontSize: 11, color: EC.inkSoft }}>{b.description}</Text>
-                    </View>
-                    {earned && <ECSmallCaps color={EC.teal} size={8}>Earned</ECSmallCaps>}
-                  </View>
-                );
-              })}
-            </View>
-          )}
-        </View>
-
-        {/* Category personal bests */}
-        {catBests.length > 0 && (
-          <View style={{ paddingHorizontal: 24, marginBottom: 20 }}>
-            <ECSmallCaps color={EC.inkFaint} size={9}>Personal bests by category</ECSmallCaps>
-            <View style={{ marginTop: 10, borderWidth: 1, borderColor: EC.creamLine, borderRadius: 6, overflow: 'hidden' }}>
-              {catBests.map((pb, i) => {
-                const cat = CATEGORIES_LIST.find(c => c.id === pb.category_id);
-                return (
-                  <View key={pb.category_id} style={{
-                    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-                    padding: 11, paddingHorizontal: 16,
-                    borderTopWidth: i > 0 ? 1 : 0, borderTopColor: EC.creamLine,
-                  }}>
-                    <Text style={{ fontFamily: F.serifItalic, fontSize: 14, color: EC.ink }}>
-                      {cat?.name || '—'}
-                    </Text>
-                    <ECMono color={EC.ink} size={13}>{pb.score.toLocaleString()}</ECMono>
-                  </View>
-                );
-              })}
-            </View>
-          </View>
-        )}
-        {/* Toi & Moi Debts */}
+        {/* Toi & Moi Debts — shown first, above badges, so nothing slips by */}
         {debts.length > 0 && (
           <View style={{ paddingHorizontal: 24, marginBottom: 20 }}>
             <ECSmallCaps color={EC.inkFaint} size={9}>Toi &amp; Moi — debts</ECSmallCaps>
@@ -222,6 +171,58 @@ export function ProfileScreen({ userId, profile, allBadges, onBack }: Props) {
                 </View>
               </>
             )}
+          </View>
+        )}
+
+        {/* Badges */}
+        <View style={{ paddingHorizontal: 24, marginBottom: 20 }}>
+          <ECSmallCaps color={EC.inkFaint} size={9}>Badges ({earnedIds.size} / {allBadges.length})</ECSmallCaps>
+          {loading ? <Spinner /> : (
+            <View style={{ marginTop: 10, borderWidth: 1, borderColor: EC.creamLine, borderRadius: 6, overflow: 'hidden' }}>
+              {allBadges.map((b, i) => {
+                const earned = earnedIds.has(b.id);
+                return (
+                  <View key={b.id} style={{
+                    flexDirection: 'row', alignItems: 'center', gap: 12,
+                    padding: 11, paddingHorizontal: 16, opacity: earned ? 1 : 0.38,
+                    borderTopWidth: i > 0 ? 1 : 0, borderTopColor: EC.creamLine,
+                  }}>
+                    <Text style={{ fontFamily: F.serif, fontSize: 16, color: earned ? EC.teal : EC.inkFaint, width: 28 }}>
+                      {b.icon}
+                    </Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontFamily: F.serif, fontSize: 14, color: EC.ink }}>{b.name}</Text>
+                      <Text style={{ fontFamily: F.serifItalic, fontSize: 11, color: EC.inkSoft }}>{b.description}</Text>
+                    </View>
+                    {earned && <ECSmallCaps color={EC.teal} size={8}>Earned</ECSmallCaps>}
+                  </View>
+                );
+              })}
+            </View>
+          )}
+        </View>
+
+        {/* Category personal bests */}
+        {catBests.length > 0 && (
+          <View style={{ paddingHorizontal: 24, marginBottom: 20 }}>
+            <ECSmallCaps color={EC.inkFaint} size={9}>Personal bests by category</ECSmallCaps>
+            <View style={{ marginTop: 10, borderWidth: 1, borderColor: EC.creamLine, borderRadius: 6, overflow: 'hidden' }}>
+              {catBests.map((pb, i) => {
+                const cat = CATEGORIES_LIST.find(c => c.id === pb.category_id);
+                return (
+                  <View key={pb.category_id} style={{
+                    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+                    padding: 11, paddingHorizontal: 16,
+                    borderTopWidth: i > 0 ? 1 : 0, borderTopColor: EC.creamLine,
+                  }}>
+                    <Text style={{ fontFamily: F.serifItalic, fontSize: 14, color: EC.ink }}>
+                      {cat?.name || '—'}
+                    </Text>
+                    <ECMono color={EC.ink} size={13}>{pb.score.toLocaleString()}</ECMono>
+                  </View>
+                );
+              })}
+            </View>
           </View>
         )}
 

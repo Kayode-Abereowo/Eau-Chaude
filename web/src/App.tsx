@@ -508,6 +508,7 @@ export default function App() {
               displayName={profile.display_name || 'Player'}
               joinSessionId={tmJoinId}
               onHome={() => { setTmJoinId(undefined); setScreen('home'); }}
+              onProfile={() => setScreen('profile')}
             />
           )}
         </IOSDevice>

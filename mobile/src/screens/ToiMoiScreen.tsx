@@ -80,6 +80,7 @@ interface Props {
   displayName: string;
   joinSessionId?: string;
   onHome: () => void;
+  onProfile?: () => void;
 }
 
 // ── Shared atoms ──────────────────────────────────────────────────────────────
@@ -154,7 +155,7 @@ function SpringIn({ children, delay = 0 }: { children: React.ReactNode; delay?: 
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-export function ToiMoiScreen({ userId, displayName, joinSessionId, onHome }: Props) {
+export function ToiMoiScreen({ userId, displayName, joinSessionId, onHome, onProfile }: Props) {
   const insets = useSafeAreaInsets();
   const [phase,             setPhase]           = useState<TMPhase>(joinSessionId ? 'lobby' : 'setup');
   const [session,           setSession]         = useState<TmSession | null>(null);
@@ -194,6 +195,7 @@ export function ToiMoiScreen({ userId, displayName, joinSessionId, onHome }: Pro
   const channelRef            = useRef<any>(null);
   const sessionRef            = useRef<TmSession | null>(null);
   const partnerAnswersDoneRef = useRef(false);
+  const partnerMarkingDoneRef = useRef(false);
   useEffect(() => { sessionRef.current = session; }, [session]);
 
   const [missedQuestions,  setMissedQuestions]  = useState<{ question: TmQuestion; myAnswer: string }[]>([]);
@@ -254,11 +256,14 @@ export function ToiMoiScreen({ userId, displayName, joinSessionId, onHome }: Pro
     });
     ch.on('broadcast', { event: 'marking_complete' }, ({ payload }: any) => {
       if (payload.marker_id !== userId) {
+        partnerMarkingDoneRef.current = true;
         setPhase(prev => {
-          if (prev === 'marking' || prev === 'waiting_mark') {
-            loadResults(sessionRef.current!);
+          if (prev === 'waiting_mark') {
+            // I'm already done → trigger reveal now
+            triggerReveal();
             return 'reveal';
           }
+          // I'm still marking — handleMark will check the ref on last answer
           return prev;
         });
       }
@@ -374,8 +379,16 @@ export function ToiMoiScreen({ userId, displayName, joinSessionId, onHome }: Pro
     }
 
     setRevealStep(0);
-    setTimeout(() => setRevealStep(1), 5000);
-    setTimeout(() => { setRevealStep(2); Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); }, 10000);
+    setTimeout(() => setRevealStep(1), 7000);
+    setTimeout(() => { setRevealStep(2); Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); }, 14000);
+  }
+
+  async function triggerReveal() {
+    const s = sessionRef.current!;
+    await sb.from('toi_moi_sessions').update({ status: 'completed', updated_at: new Date().toISOString() }).eq('id', s.id);
+    broadcast('phase_change', { phase: 'reveal' });
+    await loadResults(s);
+    setPhase('reveal');
   }
 
   function resetState() {
@@ -387,6 +400,7 @@ export function ToiMoiScreen({ userId, displayName, joinSessionId, onHome }: Pro
     setMarkItems([]); setMarkIdx(0);
     setMyPct(0); setPartnerPct(0); setRevealStep(0);
     partnerAnswersDoneRef.current = false;
+    partnerMarkingDoneRef.current = false;
     setMissedQuestions([]); setRequestText(''); setRequestSubmitted(false);
   }
 
@@ -474,10 +488,12 @@ export function ToiMoiScreen({ userId, displayName, joinSessionId, onHome }: Pro
     } else {
       const results = markItems.map(m => ({ question_id: m.question.id, is_correct: m.answer.id === item.answer.id ? isCorrect : null }));
       broadcast('marking_complete', { marker_id: userId, results });
-      await sb.from('toi_moi_sessions').update({ status: 'completed', updated_at: new Date().toISOString() }).eq('id', session!.id);
-      broadcast('phase_change', { phase: 'reveal' });
-      await loadResults(session!);
-      setPhase('reveal');
+      if (partnerMarkingDoneRef.current) {
+        // Partner already finished → I'm the last one → trigger reveal
+        await triggerReveal();
+      } else {
+        setPhase('waiting_mark');
+      }
     }
   }
 
@@ -971,6 +987,17 @@ export function ToiMoiScreen({ userId, displayName, joinSessionId, onHome }: Pro
               <Text style={{ fontFamily: F.serifItalic, fontSize: 14, color: TM.rose }}>
                 You didn't score 70%. Watch out — {partnerName} may have something for you…
               </Text>
+              {onProfile && (
+                <Pressable onPress={onProfile} style={({ pressed }) => ({
+                  marginTop: 10, height: 40, borderWidth: 1, borderColor: TM.rose,
+                  borderRadius: 6, alignItems: 'center', justifyContent: 'center',
+                  backgroundColor: pressed ? TM.roseSoft : 'transparent',
+                })}>
+                  <Text style={{ fontFamily: F.serif, fontSize: 14, color: TM.rose }}>
+                    See what you owe →
+                  </Text>
+                </Pressable>
+              )}
             </View>
           )}
         </ScrollView>

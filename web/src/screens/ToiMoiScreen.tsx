@@ -76,6 +76,7 @@ interface Props {
   displayName: string;
   joinSessionId?: string;
   onHome: () => void;
+  onProfile?: () => void;
 }
 
 // ── CSS animations ────────────────────────────────────────────────────────────
@@ -162,7 +163,7 @@ function EmojiRain({ high }: { high: boolean }) {
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
-export function ToiMoiScreen({ userId, displayName, joinSessionId, onHome }: Props) {
+export function ToiMoiScreen({ userId, displayName, joinSessionId, onHome, onProfile }: Props) {
   const [phase,          setPhase]         = useState<TMPhase>(joinSessionId ? 'lobby' : 'setup');
   const [session,        setSession]       = useState<TmSession | null>(null);
   const [role,           setRole]          = useState<'host' | 'guest'>('host');
@@ -203,6 +204,7 @@ export function ToiMoiScreen({ userId, displayName, joinSessionId, onHome }: Pro
   const channelRef           = useRef<ReturnType<typeof sb.channel> | null>(null);
   const sessionRef           = useRef<TmSession | null>(null);
   const partnerAnswersDoneRef = useRef(false); // true once the other player finishes answering
+  const partnerMarkingDoneRef = useRef(false); // true once the other player finishes marking
 
   const [missedQuestions, setMissedQuestions] = useState<{ question: TmQuestion; myAnswer: string }[]>([]);
   const [requestText,     setRequestText]     = useState('');
@@ -269,8 +271,14 @@ export function ToiMoiScreen({ userId, displayName, joinSessionId, onHome }: Pro
     });
     ch.on('broadcast', { event: 'marking_complete' }, ({ payload }: any) => {
       if (payload.marker_id !== userId) {
+        partnerMarkingDoneRef.current = true;
         setPhase(prev => {
-          if (prev === 'waiting_mark') { triggerReveal(session, payload.results); return 'reveal'; }
+          if (prev === 'waiting_mark') {
+            // I'm already done → trigger reveal now
+            triggerReveal();
+            return 'reveal';
+          }
+          // I'm still marking — handleMark will check the ref on last answer
           return prev;
         });
       }
@@ -390,12 +398,16 @@ export function ToiMoiScreen({ userId, displayName, joinSessionId, onHome }: Pro
     }
 
     setRevealStep(0);
-    setTimeout(() => setRevealStep(1), 5000);
-    setTimeout(() => setRevealStep(2), 10000);
+    setTimeout(() => setRevealStep(1), 7000);
+    setTimeout(() => setRevealStep(2), 14000);
   }
 
-  function triggerReveal(s: TmSession, _results: any) {
-    loadResults(s);
+  async function triggerReveal() {
+    const s = sessionRef.current!;
+    await sb.from('toi_moi_sessions').update({ status: 'completed', updated_at: new Date().toISOString() }).eq('id', s.id);
+    broadcast('phase_change', { phase: 'reveal' });
+    await loadResults(s);
+    setPhase('reveal');
   }
 
   function resetState() {
@@ -409,6 +421,7 @@ export function ToiMoiScreen({ userId, displayName, joinSessionId, onHome }: Pro
     setMarkItems([]); setMarkIdx(0);
     setMyPct(0); setPartnerPct(0); setRevealStep(0);
     partnerAnswersDoneRef.current = false;
+    partnerMarkingDoneRef.current = false;
     setMissedQuestions([]); setRequestText(''); setRequestSubmitted(false);
   }
 
@@ -495,12 +508,12 @@ export function ToiMoiScreen({ userId, displayName, joinSessionId, onHome }: Pro
     } else {
       const myQs = markItems.map(m => ({ question_id: m.question.id, is_correct: m.answer.id === item.answer.id ? isCorrect : null }));
       broadcast('marking_complete', { marker_id: userId, results: myQs });
-      setPhase('waiting_mark');
-      // If both done simultaneously, reveal
-      await sb.from('toi_moi_sessions').update({ status: 'completed', updated_at: new Date().toISOString() }).eq('id', session!.id);
-      broadcast('phase_change', { phase: 'reveal' });
-      await loadResults(session!);
-      setPhase('reveal');
+      if (partnerMarkingDoneRef.current) {
+        // Partner already finished → I'm the last one → trigger reveal
+        await triggerReveal();
+      } else {
+        setPhase('waiting_mark');
+      }
     }
   }
 
@@ -1024,9 +1037,17 @@ export function ToiMoiScreen({ userId, displayName, joinSessionId, onHome }: Pro
           {/* Notice to player who failed */}
           {myPct < 70 && (
             <div style={{ margin: '16px 24px 0', padding: '14px 16px',
-              background: TM.roseSoft, border: `1px solid ${TM.roseLine}`, borderRadius: 8,
-              fontFamily: ecSerif, fontStyle: 'italic', fontSize: 14, color: TM.rose }}>
-              You didn't score 70%. Watch out — {partnerName} may have something for you…
+              background: TM.roseSoft, border: `1px solid ${TM.roseLine}`, borderRadius: 8 }}>
+              <div style={{ fontFamily: ecSerif, fontStyle: 'italic', fontSize: 14, color: TM.rose }}>
+                You didn't score 70%. Watch out — {partnerName} may have something for you…
+              </div>
+              {onProfile && (
+                <button onClick={onProfile} style={{ marginTop: 10, width: '100%', height: 40,
+                  background: 'transparent', border: `1px solid ${TM.rose}`, borderRadius: 6,
+                  fontFamily: ecSerif, fontSize: 14, color: TM.rose, cursor: 'pointer' }}>
+                  See what you owe →
+                </button>
+              )}
             </div>
           )}
 

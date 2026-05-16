@@ -476,6 +476,7 @@ export default function App() {
             userId={user.id}
             displayName={profile.display_name || 'Player'}
             onHome={() => setScreen('home')}
+            onProfile={() => setScreen('profile')}
           />
         )}
 

@@ -89,53 +89,7 @@ export function ProfileScreen({ userId, profile, allBadges, onBack }: Props) {
           ))}
         </div>
 
-        {/* Badges */}
-        <ECSmallCaps color={EC.inkFaint} size={9}>Badges ({earnedIds.size} / {allBadges.length})</ECSmallCaps>
-        {loading ? <Spinner /> : (
-          <div style={{ marginTop: 10, border: `1px solid ${EC.creamLine}`, borderRadius: 6,
-            overflow: 'hidden', marginBottom: 20 }}>
-            {allBadges.map((b, i) => {
-              const earned = earnedIds.has(b.id);
-              return (
-                <div key={b.id} style={{ display: 'flex', alignItems: 'center', gap: 12,
-                  padding: '11px 16px', opacity: earned ? 1 : 0.38,
-                  borderTop: i > 0 ? `1px solid ${EC.creamLine}` : 'none' }}>
-                  <span style={{ fontFamily: ecSerif, fontSize: 16,
-                    color: earned ? EC.teal : EC.inkFaint, minWidth: 28 }}>{b.icon}</span>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontFamily: ecSerif, fontSize: 14, color: EC.ink }}>{b.name}</div>
-                    <div style={{ fontFamily: ecSerif, fontStyle: 'italic', fontSize: 11, color: EC.inkSoft }}>{b.description}</div>
-                  </div>
-                  {earned && <ECSmallCaps color={EC.teal} size={8}>Earned</ECSmallCaps>}
-                </div>
-              );
-            })}
-          </div>
-        )}
-
-        {/* Category personal bests */}
-        {catBests.length > 0 && (
-          <>
-            <ECSmallCaps color={EC.inkFaint} size={9}>Personal bests by category</ECSmallCaps>
-            <div style={{ marginTop: 10, border: `1px solid ${EC.creamLine}`, borderRadius: 6,
-              overflow: 'hidden', marginBottom: 20 }}>
-              {catBests.map((pb, i) => {
-                const cat = CATEGORIES_LIST.find(c => c.id === pb.category_id);
-                return (
-                  <div key={pb.category_id} style={{ display: 'flex', justifyContent: 'space-between',
-                    alignItems: 'center', padding: '11px 16px',
-                    borderTop: i > 0 ? `1px solid ${EC.creamLine}` : 'none' }}>
-                    <div style={{ fontFamily: ecSerif, fontStyle: 'italic', fontSize: 14, color: EC.ink }}>
-                      {cat?.name || '—'}
-                    </div>
-                    <ECMono color={EC.ink} size={13}>{pb.score.toLocaleString()}</ECMono>
-                  </div>
-                );
-              })}
-            </div>
-          </>
-        )}
-        {/* Toi & Moi Debts */}
+        {/* Toi & Moi Debts — shown first, above badges, so nothing slips by */}
         {debts.length > 0 && (
           <>
             <ECSmallCaps color={EC.inkFaint} size={9}>Toi &amp; Moi — debts</ECSmallCaps>
@@ -204,6 +158,53 @@ export function ProfileScreen({ userId, profile, allBadges, onBack }: Props) {
                 </div>
               </>
             )}
+          </>
+        )}
+
+        {/* Badges */}
+        <ECSmallCaps color={EC.inkFaint} size={9}>Badges ({earnedIds.size} / {allBadges.length})</ECSmallCaps>
+        {loading ? <Spinner /> : (
+          <div style={{ marginTop: 10, border: `1px solid ${EC.creamLine}`, borderRadius: 6,
+            overflow: 'hidden', marginBottom: 20 }}>
+            {allBadges.map((b, i) => {
+              const earned = earnedIds.has(b.id);
+              return (
+                <div key={b.id} style={{ display: 'flex', alignItems: 'center', gap: 12,
+                  padding: '11px 16px', opacity: earned ? 1 : 0.38,
+                  borderTop: i > 0 ? `1px solid ${EC.creamLine}` : 'none' }}>
+                  <span style={{ fontFamily: ecSerif, fontSize: 16,
+                    color: earned ? EC.teal : EC.inkFaint, minWidth: 28 }}>{b.icon}</span>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontFamily: ecSerif, fontSize: 14, color: EC.ink }}>{b.name}</div>
+                    <div style={{ fontFamily: ecSerif, fontStyle: 'italic', fontSize: 11, color: EC.inkSoft }}>{b.description}</div>
+                  </div>
+                  {earned && <ECSmallCaps color={EC.teal} size={8}>Earned</ECSmallCaps>}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Category personal bests */}
+        {catBests.length > 0 && (
+          <>
+            <ECSmallCaps color={EC.inkFaint} size={9}>Personal bests by category</ECSmallCaps>
+            <div style={{ marginTop: 10, border: `1px solid ${EC.creamLine}`, borderRadius: 6,
+              overflow: 'hidden', marginBottom: 20 }}>
+              {catBests.map((pb, i) => {
+                const cat = CATEGORIES_LIST.find(c => c.id === pb.category_id);
+                return (
+                  <div key={pb.category_id} style={{ display: 'flex', justifyContent: 'space-between',
+                    alignItems: 'center', padding: '11px 16px',
+                    borderTop: i > 0 ? `1px solid ${EC.creamLine}` : 'none' }}>
+                    <div style={{ fontFamily: ecSerif, fontStyle: 'italic', fontSize: 14, color: EC.ink }}>
+                      {cat?.name || '—'}
+                    </div>
+                    <ECMono color={EC.ink} size={13}>{pb.score.toLocaleString()}</ECMono>
+                  </div>
+                );
+              })}
+            </div>
           </>
         )}
 
