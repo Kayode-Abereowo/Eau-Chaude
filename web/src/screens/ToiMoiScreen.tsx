@@ -240,9 +240,10 @@ export function ToiMoiScreen({ userId, displayName, joinSessionId, onHome }: Pro
     ch.on('broadcast', { event: 'phase_change' }, ({ payload }: any) => {
       const p = payload.phase as TMPhase;
       setPhase(p);
-      if (p === 'answering') loadOpponentQuestions(session);
-      if (p === 'marking')   loadAnswersToMark(session);
-      if (p === 'reveal')    loadResults(session);
+      // Use sessionRef.current (always up-to-date) instead of the stale closure value of session
+      if (p === 'answering') loadOpponentQuestions(sessionRef.current!);
+      if (p === 'marking')   loadAnswersToMark(sessionRef.current!);
+      if (p === 'reveal')    loadResults(sessionRef.current!);
     });
     ch.on('broadcast', { event: 'question_submitted' }, ({ payload }: any) => {
       if (payload.author_id !== userId) setPartnerSubmitted(payload.questions_submitted_so_far);
@@ -306,22 +307,34 @@ export function ToiMoiScreen({ userId, displayName, joinSessionId, onHome }: Pro
   }
 
   async function loadOpponentQuestions(s: TmSession) {
-    const authorId = role === 'host' ? s.guest_user_id : s.host_user_id;
+    // Re-fetch session so we always have the live guest_user_id.
+    // The host's local session was created before the guest joined, so
+    // guest_user_id is null in their local state until we refresh here.
+    const { data: fresh } = await sb.from('toi_moi_sessions').select('*').eq('id', s.id).single();
+    const ss = (fresh as TmSession | null) ?? s;
+    if (fresh) { setSession(ss); sessionRef.current = ss; }
+    const authorId = role === 'host' ? ss.guest_user_id : ss.host_user_id;
+    if (!authorId) return; // guard: guest hasn't joined yet
     const { data } = await sb.from('toi_moi_questions')
-      .select('*').eq('session_id', s.id).eq('author_user_id', authorId!)
+      .select('*').eq('session_id', ss.id).eq('author_user_id', authorId)
       .order('question_order');
     setOpponentQs((data || []) as TmQuestion[]);
     setAnswerIdx(0); setDraftAns(''); setShowHint(false);
   }
 
   async function loadAnswersToMark(s: TmSession) {
+    // Re-fetch for the same reason — ensure guest_user_id is present.
+    const { data: fresh } = await sb.from('toi_moi_sessions').select('*').eq('id', s.id).single();
+    const ss = (fresh as TmSession | null) ?? s;
+    if (fresh) { setSession(ss); sessionRef.current = ss; }
     const myQs = await sb.from('toi_moi_questions')
-      .select('*').eq('session_id', s.id).eq('author_user_id', userId).order('question_order');
+      .select('*').eq('session_id', ss.id).eq('author_user_id', userId).order('question_order');
     const myQIds = (myQs.data || []).map((q: any) => q.id);
     if (!myQIds.length) return;
-    const answererIds = role === 'host' ? s.guest_user_id : s.host_user_id;
+    const answererIds = role === 'host' ? ss.guest_user_id : ss.host_user_id;
+    if (!answererIds) return;
     const answers = await sb.from('toi_moi_answers')
-      .select('*').in('question_id', myQIds).eq('answerer_user_id', answererIds!);
+      .select('*').in('question_id', myQIds).eq('answerer_user_id', answererIds);
     const qMap: Record<string, TmQuestion> = {};
     (myQs.data || []).forEach((q: any) => { qMap[q.id] = q; });
     const items: MarkItem[] = (answers.data || [])
