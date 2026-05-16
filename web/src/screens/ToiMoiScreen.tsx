@@ -204,6 +204,10 @@ export function ToiMoiScreen({ userId, displayName, joinSessionId, onHome }: Pro
   const sessionRef           = useRef<TmSession | null>(null);
   const partnerAnswersDoneRef = useRef(false); // true once the other player finishes answering
 
+  const [missedQuestions, setMissedQuestions] = useState<{ question: TmQuestion; myAnswer: string }[]>([]);
+  const [requestText,     setRequestText]     = useState('');
+  const [requestSubmitted,setRequestSubmitted]= useState(false);
+
   // keep sessionRef in sync
   useEffect(() => { sessionRef.current = session; }, [session]);
 
@@ -356,20 +360,38 @@ export function ToiMoiScreen({ userId, displayName, joinSessionId, onHome }: Pro
   async function loadResults(s: TmSession) {
     const { data: answers } = await sb.from('toi_moi_answers')
       .select('*').eq('session_id', s.id);
-    const all = (answers || []) as TmAnswer[];
-    const mine    = all.filter(a => a.answerer_user_id === userId);
-    const theirs  = all.filter(a => a.answerer_user_id !== userId);
-    const myCorr  = mine.filter(a => a.is_correct).length;
-    const thCorr  = theirs.filter(a => a.is_correct).length;
-    const total   = s.question_count;
-    setMyPct(Math.round((myCorr / total) * 100));
-    setPartnerPct(Math.round((thCorr / total) * 100));
+    const all    = (answers || []) as TmAnswer[];
+    const mine   = all.filter(a => a.answerer_user_id === userId);
+    const theirs = all.filter(a => a.answerer_user_id !== userId);
+    const myCorr = mine.filter(a => a.is_correct === true).length;
+    const thCorr = theirs.filter(a => a.is_correct === true).length;
+    const total  = s.question_count;
+
+    const mp = Math.round((myCorr / total) * 100);
+    const pp = Math.round((thCorr / total) * 100);
+    setMyPct(mp);
+    setPartnerPct(pp);
     setMySeed(myCorr);
     setPartnerSeed(thCorr);
+
+    // Fetch question texts for wrong answers (missed questions review)
+    const wrongIds = mine.filter(a => a.is_correct === false).map(a => a.question_id);
+    if (wrongIds.length > 0) {
+      const { data: qs } = await sb.from('toi_moi_questions').select('*').in('id', wrongIds);
+      const qMap: Record<string, TmQuestion> = {};
+      (qs || []).forEach((q: any) => { qMap[q.id] = q as TmQuestion; });
+      setMissedQuestions(
+        mine.filter(a => a.is_correct === false)
+          .map(a => ({ question: qMap[a.question_id], myAnswer: a.answer_text }))
+          .filter(m => m.question)
+      );
+    } else {
+      setMissedQuestions([]);
+    }
+
     setRevealStep(0);
-    setTimeout(() => setRevealStep(1), 2200);
-    setTimeout(() => setRevealStep(2), 5500);
-    setTimeout(() => setRevealStep(3), 8800);
+    setTimeout(() => setRevealStep(1), 5000);
+    setTimeout(() => setRevealStep(2), 10000);
   }
 
   function triggerReveal(s: TmSession, _results: any) {
@@ -387,6 +409,7 @@ export function ToiMoiScreen({ userId, displayName, joinSessionId, onHome }: Pro
     setMarkItems([]); setMarkIdx(0);
     setMyPct(0); setPartnerPct(0); setRevealStep(0);
     partnerAnswersDoneRef.current = false;
+    setMissedQuestions([]); setRequestText(''); setRequestSubmitted(false);
   }
 
   // ── Phase handlers ────────────────────────────────────────────────────────
@@ -479,6 +502,23 @@ export function ToiMoiScreen({ userId, displayName, joinSessionId, onHome }: Pro
       await loadResults(session!);
       setPhase('reveal');
     }
+  }
+
+  async function handleSubmitRequest() {
+    const text = requestText.trim();
+    if (!text || !session) return;
+    const ss = sessionRef.current ?? session;
+    const debtorId   = role === 'host' ? ss.guest_user_id : ss.host_user_id;
+    const debtorName = role === 'host' ? ss.guest_name    : ss.host_name;
+    await sb.from('toi_moi_debts').insert({
+      session_id:       ss.id,
+      debtor_user_id:   debtorId,
+      creditor_user_id: userId,
+      debtor_name:      debtorName || 'Partner',
+      creditor_name:    displayName,
+      request_text:     text,
+    });
+    setRequestSubmitted(true);
   }
 
   async function handlePlayAgain() {
@@ -846,85 +886,157 @@ export function ToiMoiScreen({ userId, displayName, joinSessionId, onHome }: Pro
 
   // ── 10. REVEAL ────────────────────────────────────────────────────────────
   if (phase === 'reveal') {
-    const myHigh    = myPct >= 70;
-    const partHigh  = partnerPct >= 70;
-    const myR       = pickReaction(myPct, mySeed);
-    const partR     = pickReaction(partnerPct, partnerSeed);
-    const bothLow   = !myHigh && !partHigh;
+    const myHigh = myPct >= 70;
+    const myR    = pickReaction(myPct, mySeed);
 
+    // ── Step 0: Big score reveal (0–5 s) ──────────────────────────────────
+    if (revealStep === 0) return wrap(
+      <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column',
+        alignItems: 'center', justifyContent: 'center', padding: '0 28px', textAlign: 'center',
+        background: TM.bg, position: 'relative', overflow: 'hidden' }}>
+        <style>{`
+          @keyframes tm-pct-pop { 0%{opacity:0;transform:scale(0.4);} 60%{transform:scale(1.12);} 100%{opacity:1;transform:scale(1);} }
+          @keyframes tm-bar-slow { from{width:0%} to{width:var(--w)} }
+        `}</style>
+        <div style={{ fontFamily: ecSerif, fontStyle: 'italic', fontSize: 17, color: TM.inkSoft,
+          marginBottom: 32, animation: 'tm-fade-up 1s ease both' }}>
+          How well do you know {partnerName}?
+        </div>
+        <div style={{ fontFamily: ecSerif, fontSize: 112, lineHeight: 1,
+          color: myHigh ? TM.rose : TM.gold, letterSpacing: '-0.03em',
+          animation: 'tm-pct-pop 1.2s 0.4s cubic-bezier(.34,1.56,.64,1) both' }}>
+          {myPct}%
+        </div>
+        <div style={{ width: '80%', height: 10, background: TM.roseSoft, borderRadius: 5,
+          overflow: 'hidden', marginTop: 28 }}>
+          <div style={{ '--w': `${myPct}%`, height: '100%', borderRadius: 5,
+            background: myHigh ? TM.rose : TM.gold,
+            animation: 'tm-bar-slow 2.5s 1s ease both', width: 0 } as React.CSSProperties} />
+        </div>
+        <div style={{ marginTop: 32, fontSize: 40, letterSpacing: 6,
+          animation: 'tm-fade-up 1s 2s ease both' }}>{myR.emojis}</div>
+      </div>
+    );
+
+    // ── Step 1: Reaction quote (5–10 s) ───────────────────────────────────
+    if (revealStep === 1) return wrap(
+      <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column',
+        alignItems: 'center', justifyContent: 'center', padding: '0 32px', textAlign: 'center',
+        background: TM.bg }}>
+        <style>{`@keyframes tm-quote-in { 0%{opacity:0;transform:translateY(40px) scale(0.88);} 100%{opacity:1;transform:none;} }`}</style>
+        <div style={{ fontFamily: 'Georgia, serif', fontStyle: 'italic', fontWeight: 700,
+          fontSize: 42, lineHeight: 1.25, color: myHigh ? TM.rose : TM.gold,
+          animation: 'tm-quote-in 1.4s ease both', maxWidth: 340 }}>
+          "{myR.text}"
+        </div>
+        <div style={{ marginTop: 36, fontSize: 48, letterSpacing: 8,
+          animation: 'tm-fade-up 1s 1s ease both' }}>{myR.emojis}</div>
+        <div style={{ marginTop: 48, fontFamily: ecSerif, fontStyle: 'italic', fontSize: 13,
+          color: TM.inkFaint, animation: 'tm-fade-up 0.8s 2.5s ease both' }}>
+          Results coming…
+        </div>
+      </div>
+    );
+
+    // ── Step 2: Scores + missed questions + request ────────────────────────
     return wrap(
       <>
-        {(revealStep >= 1 && myHigh) && <EmojiRain high />}
-        {(revealStep >= 2 && partHigh) && <EmojiRain high />}
+        {myHigh && <EmojiRain high />}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '0 0 20px', position: 'relative', zIndex: 1 }}>
+          <TmHeader left="Toi & Moi" right="The verdict" />
 
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '0 24px', textAlign: 'center', overflow: 'hidden', zIndex: 1 }}>
+          {/* Score cards — both players */}
+          <div style={{ display: 'flex', gap: 10, margin: '20px 24px 0' }}>
+            {[
+              { name: 'You', pct: myPct, high: myHigh, r: myR },
+              { name: partnerName, pct: partnerPct, high: partnerPct >= 70, r: pickReaction(partnerPct, partnerSeed) },
+            ].map(p => (
+              <div key={p.name} style={{ flex: 1, padding: '18px 12px',
+                background: p.high ? TM.roseSoft : TM.goldSoft,
+                border: `1px solid ${p.high ? TM.roseLine : TM.gold}`,
+                borderRadius: 8, textAlign: 'center' }}>
+                <div style={{ fontFamily: ecSerif, fontSize: 10, letterSpacing: '0.2em',
+                  textTransform: 'uppercase', color: TM.inkFaint }}>{p.name}</div>
+                <div style={{ fontFamily: ecSerif, fontSize: 52, color: p.high ? TM.rose : TM.gold,
+                  lineHeight: 1, marginTop: 8 }}>{p.pct}%</div>
+                <div style={{ marginTop: 8, fontSize: 20 }}>{p.r.emojis.slice(0, 3)}</div>
+              </div>
+            ))}
+          </div>
 
-          {/* Loading bar phase */}
-          {revealStep === 0 && (
-            <div style={{ width: '100%', animation: 'tm-fade-up 0.4s ease both' }}>
-              <div style={{ fontFamily: ecSerif, fontStyle: 'italic', fontSize: 18, color: TM.inkSoft, marginBottom: 28 }}>
-                Tallying the results…
+          {/* Missed questions review */}
+          {missedQuestions.length > 0 && (
+            <div style={{ margin: '20px 24px 0' }}>
+              <div style={{ fontFamily: ecSerif, fontSize: 10, letterSpacing: '0.22em',
+                textTransform: 'uppercase', color: TM.inkFaint, marginBottom: 10 }}>
+                Questions you missed ({missedQuestions.length})
               </div>
-              {[{ label: 'You', pct: myPct }, { label: partnerName, pct: partnerPct }].map(({ label, pct }) => (
-                <div key={label} style={{ marginBottom: 20 }}>
-                  <div style={{ fontFamily: ecSerif, fontSize: 12, letterSpacing: '0.2em', textTransform: 'uppercase', color: TM.inkFaint, marginBottom: 8 }}>{label}</div>
-                  <div style={{ height: 8, background: TM.roseSoft, borderRadius: 4, overflow: 'hidden' }}>
-                    <div style={{ '--w': `${pct}%`, height: '100%', background: pct >= 70 ? TM.rose : TM.gold, borderRadius: 4, animation: 'tm-bar 1.8s 0.3s ease both', width: 0 } as React.CSSProperties} />
-                  </div>
-                  <div style={{ marginTop: 6, fontFamily: ecSerif, fontSize: 28, color: pct >= 70 ? TM.rose : TM.gold }}>{pct}%</div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* My reaction */}
-          {revealStep >= 1 && revealStep < 3 && (
-            <div style={{ animation: 'tm-reaction 0.8s ease both', maxWidth: 320 }}>
-              <div style={{ fontFamily: ecSerif, fontSize: 10, letterSpacing: '0.22em', textTransform: 'uppercase', color: TM.inkFaint, marginBottom: 16 }}>
-                You scored {myPct}%
-              </div>
-              <div style={{ fontFamily: 'Georgia, serif', fontWeight: 700, fontSize: 32, color: myHigh ? TM.rose : TM.gold, lineHeight: 1.2, marginBottom: 16, animation: revealStep === 1 ? 'tm-shake 0.5s 0.9s ease' : 'none' }}>
-                "{myR.text}"
-              </div>
-              <div style={{ fontSize: 36, letterSpacing: 4 }}>{myR.emojis}</div>
-            </div>
-          )}
-
-          {/* Partner reaction */}
-          {revealStep >= 2 && revealStep < 3 && (
-            <div style={{ marginTop: 32, animation: 'tm-reaction 0.8s ease both', maxWidth: 320 }}>
-              <div style={{ fontFamily: ecSerif, fontSize: 10, letterSpacing: '0.22em', textTransform: 'uppercase', color: TM.inkFaint, marginBottom: 12 }}>
-                {partnerName} scored {partnerPct}%
-              </div>
-              <div style={{ fontFamily: 'Georgia, serif', fontWeight: 700, fontSize: 28, color: partHigh ? TM.rose : TM.gold, lineHeight: 1.2 }}>
-                "{partR.text}"
-              </div>
-            </div>
-          )}
-
-          {/* Full results */}
-          {revealStep >= 3 && (
-            <div style={{ width: '100%', animation: 'tm-fade-up 0.6s ease both' }}>
-              {bothLow && (
-                <div style={{ marginBottom: 20, padding: '12px 16px', background: TM.roseSoft, border: `1px solid ${TM.roseLine}`, borderRadius: 6, fontFamily: ecSerif, fontSize: 15, color: TM.rose }}>
-                  🫵 Someone owes someone something. Sort it out.
-                </div>
-              )}
-              <div style={{ display: 'flex', gap: 12, marginBottom: 24 }}>
-                {[{ name: 'You', pct: myPct, high: myHigh, r: myR }, { name: partnerName, pct: partnerPct, high: partHigh, r: partR }].map(p => (
-                  <div key={p.name} style={{ flex: 1, padding: '16px 12px', background: p.high ? TM.roseSoft : TM.goldSoft, border: `1px solid ${p.high ? TM.roseLine : TM.gold}`, borderRadius: 8, textAlign: 'center' }}>
-                    <div style={{ fontFamily: ecSerif, fontSize: 10, letterSpacing: '0.2em', textTransform: 'uppercase', color: TM.inkFaint }}>{p.name}</div>
-                    <div style={{ fontFamily: ecSerif, fontSize: 44, color: p.high ? TM.rose : TM.gold, lineHeight: 1, marginTop: 8 }}>{p.pct}%</div>
-                    <div style={{ marginTop: 8, fontSize: 18 }}>{p.r.emojis.slice(0, 3)}</div>
+              <div style={{ border: `1px solid ${TM.roseLine}`, borderRadius: 6, overflow: 'hidden' }}>
+                {missedQuestions.map((m, i) => (
+                  <div key={i} style={{ padding: '14px 16px',
+                    borderTop: i > 0 ? `1px solid ${TM.roseLine}` : 'none',
+                    background: i % 2 === 0 ? 'transparent' : TM.roseSoft }}>
+                    <div style={{ fontFamily: ecSerif, fontSize: 14, color: TM.ink,
+                      lineHeight: 1.5, marginBottom: 8 }}>{m.question.question_text}</div>
+                    <div style={{ fontFamily: ecSerif, fontStyle: 'italic', fontSize: 12,
+                      color: TM.rose }}>Your answer: "{m.myAnswer}"</div>
                   </div>
                 ))}
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                <TmBtn onClick={handlePlayAgain}>Play Again ↺</TmBtn>
-                <TmBtn variant="ghost" onClick={onHome}>← Go Home</TmBtn>
-              </div>
             </div>
           )}
+
+          {/* Request box — only shown to the player who PASSED (creditor) */}
+          {partnerPct < 70 && (
+            <div style={{ margin: '20px 24px 0', padding: '16px',
+              background: TM.goldSoft, border: `1px solid ${TM.gold}`, borderRadius: 8 }}>
+              <div style={{ fontFamily: ecSerif, fontSize: 14, color: TM.ink, marginBottom: 4 }}>
+                {partnerName} didn't know you well enough. 👀
+              </div>
+              {requestSubmitted ? (
+                <div style={{ marginTop: 10, fontFamily: ecSerif, fontStyle: 'italic',
+                  fontSize: 14, color: TM.gold }}>
+                  ✓ Request sent. They'll see it in their profile.
+                </div>
+              ) : (
+                <>
+                  <div style={{ marginTop: 10, fontFamily: ecSerif, fontSize: 10,
+                    letterSpacing: '0.18em', textTransform: 'uppercase', color: TM.inkFaint,
+                    marginBottom: 8 }}>What do you want from {partnerName}?</div>
+                  <textarea value={requestText} onChange={e => setRequestText(e.target.value)}
+                    placeholder="Name your price…" maxLength={300}
+                    style={{ width: '100%', padding: '12px 14px', boxSizing: 'border-box',
+                      background: '#fff', border: `1px solid ${TM.gold}`, borderRadius: 6,
+                      fontFamily: ecSerif, fontSize: 15, color: TM.ink, resize: 'none',
+                      minHeight: 80, outline: 'none', lineHeight: 1.6 }} />
+                  <button onClick={handleSubmitRequest} disabled={!requestText.trim()}
+                    style={{ marginTop: 10, width: '100%', height: 46, background: TM.gold,
+                      color: '#fff', border: 'none', borderRadius: 6, fontFamily: ecSerif,
+                      fontSize: 16, cursor: requestText.trim() ? 'pointer' : 'not-allowed',
+                      opacity: requestText.trim() ? 1 : 0.45 }}>
+                    Send request →
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* Notice to player who failed */}
+          {myPct < 70 && (
+            <div style={{ margin: '16px 24px 0', padding: '14px 16px',
+              background: TM.roseSoft, border: `1px solid ${TM.roseLine}`, borderRadius: 8,
+              fontFamily: ecSerif, fontStyle: 'italic', fontSize: 14, color: TM.rose }}>
+              You didn't score 70%. Watch out — {partnerName} may have something for you…
+            </div>
+          )}
+
+          <div style={{ height: 16 }} />
+        </div>
+
+        <div style={{ padding: '0 24px 28px', display: 'flex', flexDirection: 'column',
+          gap: 10, position: 'relative', zIndex: 1 }}>
+          <TmBtn onClick={handlePlayAgain}>Play Again ↺</TmBtn>
+          <TmBtn variant="ghost" onClick={onHome}>← Go Home</TmBtn>
         </div>
       </>
     );

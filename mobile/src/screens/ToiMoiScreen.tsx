@@ -196,6 +196,10 @@ export function ToiMoiScreen({ userId, displayName, joinSessionId, onHome }: Pro
   const partnerAnswersDoneRef = useRef(false);
   useEffect(() => { sessionRef.current = session; }, [session]);
 
+  const [missedQuestions,  setMissedQuestions]  = useState<{ question: TmQuestion; myAnswer: string }[]>([]);
+  const [requestText,      setRequestText]      = useState('');
+  const [requestSubmitted, setRequestSubmitted] = useState(false);
+
   // ── Guest join ────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!joinSessionId) return;
@@ -338,20 +342,40 @@ export function ToiMoiScreen({ userId, displayName, joinSessionId, onHome }: Pro
   }
 
   async function loadResults(s: TmSession) {
-    const { data } = await sb.from('toi_moi_answers').select('*').eq('session_id', s.id);
-    const all    = (data || []) as TmAnswer[];
+    const { data: answers } = await sb.from('toi_moi_answers')
+      .select('*').eq('session_id', s.id);
+    const all    = (answers || []) as TmAnswer[];
     const mine   = all.filter(a => a.answerer_user_id === userId);
     const theirs = all.filter(a => a.answerer_user_id !== userId);
-    const myCor  = mine.filter(a => a.is_correct).length;
-    const thCor  = theirs.filter(a => a.is_correct).length;
+    const myCorr = mine.filter(a => a.is_correct === true).length;
+    const thCorr = theirs.filter(a => a.is_correct === true).length;
     const total  = s.question_count;
-    setMyPct(Math.round((myCor / total) * 100));
-    setPartnerPct(Math.round((thCor / total) * 100));
-    setMySeed(myCor); setPartnerSeed(thCor);
+
+    const mp = Math.round((myCorr / total) * 100);
+    const pp = Math.round((thCorr / total) * 100);
+    setMyPct(mp);
+    setPartnerPct(pp);
+    setMySeed(myCorr);
+    setPartnerSeed(thCorr);
+
+    // Fetch question texts for wrong answers (missed questions review)
+    const wrongIds = mine.filter(a => a.is_correct === false).map(a => a.question_id);
+    if (wrongIds.length > 0) {
+      const { data: qs } = await sb.from('toi_moi_questions').select('*').in('id', wrongIds);
+      const qMap: Record<string, TmQuestion> = {};
+      (qs || []).forEach((q: any) => { qMap[q.id] = q as TmQuestion; });
+      setMissedQuestions(
+        mine.filter(a => a.is_correct === false)
+          .map(a => ({ question: qMap[a.question_id], myAnswer: a.answer_text }))
+          .filter(m => m.question)
+      );
+    } else {
+      setMissedQuestions([]);
+    }
+
     setRevealStep(0);
-    setTimeout(() => setRevealStep(1), 2200);
-    setTimeout(() => { setRevealStep(2); Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); }, 5500);
-    setTimeout(() => setRevealStep(3), 8800);
+    setTimeout(() => setRevealStep(1), 5000);
+    setTimeout(() => { setRevealStep(2); Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); }, 10000);
   }
 
   function resetState() {
@@ -363,6 +387,7 @@ export function ToiMoiScreen({ userId, displayName, joinSessionId, onHome }: Pro
     setMarkItems([]); setMarkIdx(0);
     setMyPct(0); setPartnerPct(0); setRevealStep(0);
     partnerAnswersDoneRef.current = false;
+    setMissedQuestions([]); setRequestText(''); setRequestSubmitted(false);
   }
 
   // ── Phase handlers ────────────────────────────────────────────────────────
@@ -454,6 +479,23 @@ export function ToiMoiScreen({ userId, displayName, joinSessionId, onHome }: Pro
       await loadResults(session!);
       setPhase('reveal');
     }
+  }
+
+  async function handleSubmitRequest() {
+    const text = requestText.trim();
+    if (!text || !session) return;
+    const ss = sessionRef.current ?? session;
+    const debtorId   = role === 'host' ? ss.guest_user_id : ss.host_user_id;
+    const debtorName = role === 'host' ? ss.guest_name    : ss.host_name;
+    await sb.from('toi_moi_debts').insert({
+      session_id:       ss.id,
+      debtor_user_id:   debtorId,
+      creditor_user_id: userId,
+      debtor_name:      debtorName || 'Partner',
+      creditor_name:    displayName,
+      request_text:     text,
+    });
+    setRequestSubmitted(true);
   }
 
   function handlePlayAgain() { broadcast('session_reset', {}); resetState(); }
@@ -785,82 +827,158 @@ export function ToiMoiScreen({ userId, displayName, joinSessionId, onHome }: Pro
 
   // ── REVEAL ────────────────────────────────────────────────────────────────
   if (phase === 'reveal') {
-    const myHigh   = myPct >= 70;
+    const myHigh = myPct >= 70;
+    const myR    = pickReaction(myPct, mySeed);
+
+    // Step 0: big score
+    if (revealStep === 0) {
+      return (
+        <View style={{ flex: 1, backgroundColor: TM.bg, alignItems: 'center',
+          justifyContent: 'center', paddingHorizontal: 28 }}>
+          <Text style={{ fontFamily: F.serifItalic, fontSize: 17, color: TM.inkSoft,
+            marginBottom: 32, textAlign: 'center' }}>
+            How well do you know {partnerName}?
+          </Text>
+          <SpringIn>
+            <Text style={{ fontFamily: F.serif, fontSize: 100, lineHeight: 100,
+              color: myHigh ? TM.rose : TM.gold, letterSpacing: -2, textAlign: 'center' }}>
+              {myPct}%
+            </Text>
+          </SpringIn>
+          <View style={{ width: '80%', height: 10, backgroundColor: TM.roseSoft,
+            borderRadius: 5, marginTop: 28, overflow: 'hidden' }}>
+            <Pulse>
+              <View style={{ width: `${myPct}%` as any, height: 10,
+                backgroundColor: myHigh ? TM.rose : TM.gold, borderRadius: 5 }} />
+            </Pulse>
+          </View>
+          <Text style={{ marginTop: 32, fontSize: 36, letterSpacing: 6,
+            textAlign: 'center' }}>{myR.emojis}</Text>
+        </View>
+      );
+    }
+
+    // Step 1: reaction quote
+    if (revealStep === 1) {
+      return (
+        <View style={{ flex: 1, backgroundColor: TM.bg, alignItems: 'center',
+          justifyContent: 'center', paddingHorizontal: 32 }}>
+          <SpringIn>
+            <Text style={{ fontFamily: F.serifItalic, fontSize: 38, lineHeight: 50,
+              color: myHigh ? TM.rose : TM.gold, textAlign: 'center', fontWeight: '700' }}>
+              "{myR.text}"
+            </Text>
+          </SpringIn>
+          <Text style={{ marginTop: 36, fontSize: 44, letterSpacing: 8,
+            textAlign: 'center' }}>{myR.emojis}</Text>
+          <Text style={{ marginTop: 48, fontFamily: F.serifItalic, fontSize: 13,
+            color: TM.inkFaint }}>Results coming…</Text>
+        </View>
+      );
+    }
+
+    // Step 2: results + missed questions + request
     const partHigh = partnerPct >= 70;
-    const myR      = pickReaction(myPct, mySeed);
     const partR    = pickReaction(partnerPct, partnerSeed);
-    const bothLow  = !myHigh && !partHigh;
-
     return (
-      <View style={{ flex: 1, backgroundColor: myHigh ? '#FDF0F0' : TM.bg }}>
-        <ScrollView contentContainerStyle={{ flexGrow: 1, alignItems: 'center', justifyContent: 'center', padding: 28 }}>
-          {revealStep === 0 && (
-            <SpringIn>
-              <Text style={{ fontFamily: F.serifItalic, fontSize: 18, color: TM.inkSoft, textAlign: 'center', marginBottom: 32 }}>
-                Tallying the results…
-              </Text>
-              {[{ label: 'You', pct: myPct }, { label: partnerName, pct: partnerPct }].map(({ label, pct }) => (
-                <View key={label} style={{ width: 280, marginBottom: 24 }}>
-                  <Text style={{ fontFamily: F.serifMedium, fontSize: 11, letterSpacing: 2, textTransform: 'uppercase', color: TM.inkFaint, marginBottom: 8, textAlign: 'center' }}>{label}</Text>
-                  <View style={{ height: 8, backgroundColor: TM.roseSoft, borderRadius: 4, overflow: 'hidden', marginBottom: 8 }}>
-                    <Animated.View style={{ height: 8, backgroundColor: pct >= 70 ? TM.rose : TM.gold, borderRadius: 4, width: `${pct}%` as any }} />
-                  </View>
-                  <Text style={{ fontFamily: F.serif, fontSize: 36, color: pct >= 70 ? TM.rose : TM.gold, textAlign: 'center' }}>{pct}%</Text>
-                </View>
-              ))}
-            </SpringIn>
-          )}
-
-          {revealStep >= 1 && revealStep < 3 && (
-            <SpringIn>
-              <Text style={{ fontFamily: F.serifMedium, fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', color: TM.inkFaint, textAlign: 'center', marginBottom: 16 }}>
-                You scored {myPct}%
-              </Text>
-              <Text style={{ fontFamily: 'Georgia', fontWeight: '700', fontSize: 30, color: myHigh ? TM.rose : TM.gold, textAlign: 'center', lineHeight: 38, marginBottom: 16 }}>
-                "{myR.text}"
-              </Text>
-              <Text style={{ fontSize: 36, textAlign: 'center', letterSpacing: 4 }}>{myR.emojis}</Text>
-            </SpringIn>
-          )}
-
-          {revealStep >= 2 && revealStep < 3 && (
-            <SpringIn delay={400}>
-              <View style={{ marginTop: 36, paddingTop: 24, borderTopWidth: 1, borderColor: TM.roseLine }}>
-                <Text style={{ fontFamily: F.serifMedium, fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', color: TM.inkFaint, textAlign: 'center', marginBottom: 12 }}>
-                  {partnerName} scored {partnerPct}%
-                </Text>
-                <Text style={{ fontFamily: 'Georgia', fontWeight: '700', fontSize: 26, color: partHigh ? TM.rose : TM.gold, textAlign: 'center', lineHeight: 32 }}>
-                  "{partR.text}"
-                </Text>
+      <View style={{ flex: 1, backgroundColor: TM.bg }}>
+        <TmHeader left="Toi & Moi" right="The verdict" />
+        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 24, paddingBottom: 40 }}>
+          {/* Score cards */}
+          <View style={{ flexDirection: 'row', gap: 10, marginBottom: 20 }}>
+            {[
+              { name: 'You', pct: myPct, high: myHigh, r: myR },
+              { name: partnerName, pct: partnerPct, high: partHigh, r: partR },
+            ].map(p => (
+              <View key={p.name} style={{ flex: 1, padding: 16,
+                backgroundColor: p.high ? TM.roseSoft : TM.goldSoft,
+                borderWidth: 1, borderColor: p.high ? TM.roseLine : TM.gold,
+                borderRadius: 8, alignItems: 'center' }}>
+                <Text style={{ fontFamily: F.serifMedium, fontSize: 9, letterSpacing: 2,
+                  textTransform: 'uppercase', color: TM.inkFaint }}>{p.name}</Text>
+                <Text style={{ fontFamily: F.serif, fontSize: 48, lineHeight: 56,
+                  color: p.high ? TM.rose : TM.gold, marginTop: 6 }}>{p.pct}%</Text>
+                <Text style={{ fontSize: 18, marginTop: 6 }}>{p.r.emojis.slice(0, 3)}</Text>
               </View>
-            </SpringIn>
-          )}
+            ))}
+          </View>
 
-          {revealStep >= 3 && (
-            <SpringIn>
-              {bothLow && (
-                <View style={{ marginBottom: 20, padding: 14, backgroundColor: TM.roseSoft, borderRadius: 6, borderWidth: 1, borderColor: TM.roseLine }}>
-                  <Text style={{ fontFamily: F.serif, fontSize: 15, color: TM.rose, textAlign: 'center' }}>
-                    🫵 Someone owes someone something. Sort it out.
-                  </Text>
-                </View>
-              )}
-              <View style={{ flexDirection: 'row', gap: 12, marginBottom: 24 }}>
-                {[{ name: 'You', pct: myPct, high: myHigh, r: myR }, { name: partnerName, pct: partnerPct, high: partHigh, r: partR }].map(p => (
-                  <View key={p.name} style={{ flex: 1, padding: 16, backgroundColor: p.high ? TM.roseSoft : TM.goldSoft, borderRadius: 8, borderWidth: 1, borderColor: p.high ? TM.roseLine : TM.gold, alignItems: 'center' }}>
-                    <Text style={{ fontFamily: F.serifMedium, fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', color: TM.inkFaint }}>{p.name}</Text>
-                    <Text style={{ fontFamily: F.serif, fontSize: 44, color: p.high ? TM.rose : TM.gold, lineHeight: 52 }}>{p.pct}%</Text>
-                    <Text style={{ fontSize: 20 }}>{p.r.emojis.slice(0, 3)}</Text>
+          {/* Missed questions */}
+          {missedQuestions.length > 0 && (
+            <View style={{ marginBottom: 20 }}>
+              <Text style={{ fontFamily: F.serifMedium, fontSize: 9, letterSpacing: 2,
+                textTransform: 'uppercase', color: TM.inkFaint, marginBottom: 10 }}>
+                Questions you missed ({missedQuestions.length})
+              </Text>
+              <View style={{ borderWidth: 1, borderColor: TM.roseLine, borderRadius: 6,
+                overflow: 'hidden' }}>
+                {missedQuestions.map((m, i) => (
+                  <View key={i} style={{ padding: 14,
+                    borderTopWidth: i > 0 ? 1 : 0, borderTopColor: TM.roseLine,
+                    backgroundColor: i % 2 === 0 ? 'transparent' : TM.roseSoft }}>
+                    <Text style={{ fontFamily: F.serif, fontSize: 14, color: TM.ink,
+                      lineHeight: 22, marginBottom: 6 }}>{m.question.question_text}</Text>
+                    <Text style={{ fontFamily: F.serifItalic, fontSize: 12,
+                      color: TM.rose }}>Your answer: "{m.myAnswer}"</Text>
                   </View>
                 ))}
               </View>
-              <View style={{ gap: 10 }}>
-                <TmBtn onPress={handlePlayAgain}>Play Again ↺</TmBtn>
-                <TmBtn variant="ghost" onPress={onHome}>← Go Home</TmBtn>
-              </View>
-            </SpringIn>
+            </View>
+          )}
+
+          {/* Request box */}
+          {partnerPct < 70 && (
+            <View style={{ marginBottom: 16, padding: 16,
+              backgroundColor: TM.goldSoft,
+              borderWidth: 1, borderColor: TM.gold, borderRadius: 8 }}>
+              <Text style={{ fontFamily: F.serif, fontSize: 14, color: TM.ink }}>
+                {partnerName} didn't know you well enough. 👀
+              </Text>
+              {requestSubmitted ? (
+                <Text style={{ marginTop: 10, fontFamily: F.serifItalic, fontSize: 14,
+                  color: TM.gold }}>✓ Request sent. They'll see it in their profile.</Text>
+              ) : (
+                <>
+                  <Text style={{ marginTop: 12, fontFamily: F.serifMedium, fontSize: 9,
+                    letterSpacing: 2, textTransform: 'uppercase', color: TM.inkFaint,
+                    marginBottom: 8 }}>What do you want from {partnerName}?</Text>
+                  <TextInput value={requestText} onChangeText={setRequestText}
+                    placeholder="Name your price…" placeholderTextColor={TM.inkFaint}
+                    multiline maxLength={300}
+                    style={{ backgroundColor: '#fff', borderWidth: 1, borderColor: TM.gold,
+                      borderRadius: 6, padding: 12, fontFamily: F.serif, fontSize: 15,
+                      color: TM.ink, minHeight: 80, textAlignVertical: 'top' }} />
+                  <Pressable onPress={handleSubmitRequest}
+                    disabled={!requestText.trim()}
+                    style={({ pressed }) => ({
+                      marginTop: 10, height: 46, backgroundColor: requestText.trim()
+                        ? (pressed ? TM.roseDeep : TM.gold) : TM.roseLine,
+                      borderRadius: 6, alignItems: 'center', justifyContent: 'center' })}>
+                    <Text style={{ fontFamily: F.serif, fontSize: 16, color: '#fff' }}>
+                      Send request →
+                    </Text>
+                  </Pressable>
+                </>
+              )}
+            </View>
+          )}
+
+          {/* Warning to the player who failed */}
+          {myPct < 70 && (
+            <View style={{ marginBottom: 16, padding: 14,
+              backgroundColor: TM.roseSoft,
+              borderWidth: 1, borderColor: TM.roseLine, borderRadius: 8 }}>
+              <Text style={{ fontFamily: F.serifItalic, fontSize: 14, color: TM.rose }}>
+                You didn't score 70%. Watch out — {partnerName} may have something for you…
+              </Text>
+            </View>
           )}
         </ScrollView>
+
+        <View style={{ paddingHorizontal: 24, paddingBottom: 32, gap: 10 }}>
+          <TmBtn onPress={handlePlayAgain}>Play Again ↺</TmBtn>
+          <TmBtn variant="ghost" onPress={onHome}>← Go Home</TmBtn>
+        </View>
       </View>
     );
   }

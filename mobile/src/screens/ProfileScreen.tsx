@@ -12,16 +12,31 @@ interface Props {
   onBack: () => void;
 }
 
+const TM_ROSE = '#B65B5C';
+const TM_GOLD = '#C4973A';
+
 export function ProfileScreen({ userId, profile, allBadges, onBack }: Props) {
   const [userBadges,  setUserBadges]  = useState<{ badge_id: string }[]>([]);
   const [catBests,    setCatBests]    = useState<{ category_id: number; score: number }[]>([]);
   const [h2hRecord,   setH2hRecord]   = useState<{ wins: number; losses: number } | null>(null);
   const [loading,     setLoading]     = useState(true);
+  const [debts, setDebts] = useState<{
+    id: string; session_id: string;
+    debtor_user_id: string; creditor_user_id: string;
+    debtor_name: string; creditor_name: string;
+    request_text: string; is_paid: boolean;
+    created_at: string;
+  }[]>([]);
   const insets = useSafeAreaInsets();
 
   useEffect(() => {
     if (!userId) return;
     (async () => {
+      sb.from('toi_moi_debts').select('*')
+        .or(`debtor_user_id.eq.${userId},creditor_user_id.eq.${userId}`)
+        .order('created_at', { ascending: false })
+        .then(({ data }) => setDebts((data as any[]) || []));
+
       const [{ data: ub }, { data: pb }, { data: h2hRows }] = await Promise.all([
         sb.from('user_badges').select('badge_id,earned_at').eq('user_id', userId),
         sb.from('personal_bests').select('category_id,score').eq('user_id', userId).order('score', { ascending: false }),
@@ -39,6 +54,11 @@ export function ProfileScreen({ userId, profile, allBadges, onBack }: Props) {
   }, [userId]);
 
   const earnedIds = new Set(userBadges.map(b => b.badge_id));
+
+  async function markDebtPaid(debtId: string) {
+    await sb.from('toi_moi_debts').update({ is_paid: true, paid_at: new Date().toISOString() }).eq('id', debtId);
+    setDebts(prev => prev.map(d => d.id === debtId ? { ...d, is_paid: true } : d));
+  }
 
   return (
     <View style={{ flex: 1, backgroundColor: EC.cream }}>
@@ -131,6 +151,80 @@ export function ProfileScreen({ userId, profile, allBadges, onBack }: Props) {
             </View>
           </View>
         )}
+        {/* Toi & Moi Debts */}
+        {debts.length > 0 && (
+          <View style={{ paddingHorizontal: 24, marginBottom: 20 }}>
+            <ECSmallCaps color={EC.inkFaint} size={9}>Toi &amp; Moi — debts</ECSmallCaps>
+
+            {/* What you owe */}
+            {debts.filter(d => d.debtor_user_id === userId).length > 0 && (
+              <>
+                <View style={{ marginTop: 10, marginBottom: 4 }}>
+                  <ECSmallCaps color={TM_ROSE} size={8}>You owe</ECSmallCaps>
+                </View>
+                <View style={{ borderWidth: 1, borderColor: EC.creamLine, borderRadius: 6,
+                  overflow: 'hidden', marginBottom: 14 }}>
+                  {debts.filter(d => d.debtor_user_id === userId).map((d, i) => (
+                    <View key={d.id} style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 12,
+                      padding: 12, paddingHorizontal: 16, opacity: d.is_paid ? 0.45 : 1,
+                      borderTopWidth: i > 0 ? 1 : 0, borderTopColor: EC.creamLine }}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ fontFamily: F.serifItalic, fontSize: 14, color: EC.ink,
+                          textDecorationLine: d.is_paid ? 'line-through' : 'none' }}>
+                          {d.request_text}
+                        </Text>
+                        <Text style={{ marginTop: 3, fontFamily: F.serif, fontSize: 11,
+                          color: EC.inkFaint }}>Owed to {d.creditor_name}</Text>
+                      </View>
+                      {d.is_paid
+                        ? <ECSmallCaps color={EC.inkFaint} size={8}>Paid</ECSmallCaps>
+                        : <ECSmallCaps color={TM_ROSE} size={8}>Pending</ECSmallCaps>}
+                    </View>
+                  ))}
+                </View>
+              </>
+            )}
+
+            {/* What others owe you */}
+            {debts.filter(d => d.creditor_user_id === userId).length > 0 && (
+              <>
+                <View style={{ marginBottom: 4 }}>
+                  <ECSmallCaps color={EC.inkFaint} size={8}>Owed to you</ECSmallCaps>
+                </View>
+                <View style={{ borderWidth: 1, borderColor: EC.creamLine, borderRadius: 6,
+                  overflow: 'hidden', marginBottom: 4 }}>
+                  {debts.filter(d => d.creditor_user_id === userId).map((d, i) => (
+                    <View key={d.id} style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 12,
+                      padding: 12, paddingHorizontal: 16, opacity: d.is_paid ? 0.45 : 1,
+                      borderTopWidth: i > 0 ? 1 : 0, borderTopColor: EC.creamLine }}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ fontFamily: F.serifItalic, fontSize: 14, color: EC.ink,
+                          textDecorationLine: d.is_paid ? 'line-through' : 'none' }}>
+                          {d.request_text}
+                        </Text>
+                        <Text style={{ marginTop: 3, fontFamily: F.serif, fontSize: 11,
+                          color: EC.inkFaint }}>From {d.debtor_name}</Text>
+                      </View>
+                      {d.is_paid ? (
+                        <ECSmallCaps color={EC.inkFaint} size={8}>Paid ✓</ECSmallCaps>
+                      ) : (
+                        <Pressable onPress={() => markDebtPaid(d.id)}
+                          style={({ pressed }) => ({
+                            borderWidth: 1, borderColor: EC.creamLine, borderRadius: 4,
+                            paddingVertical: 4, paddingHorizontal: 8,
+                            backgroundColor: pressed ? EC.creamLine : 'transparent' })}>
+                          <Text style={{ fontFamily: F.serif, fontSize: 10,
+                            color: EC.inkSoft, letterSpacing: 1 }}>Mark paid</Text>
+                        </Pressable>
+                      )}
+                    </View>
+                  ))}
+                </View>
+              </>
+            )}
+          </View>
+        )}
+
         <View style={{ height: 16 }} />
       </ScrollView>
 
